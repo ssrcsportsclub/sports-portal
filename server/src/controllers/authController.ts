@@ -38,10 +38,11 @@ export const registerUser = async (req: Request, res: Response) => {
         (user._id as mongoose.Types.ObjectId).toString(),
       );
 
+      // For cross-domain cookies (different Vercel deployments)
       res.cookie("session", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
@@ -88,10 +89,11 @@ export const loginUser = async (req: Request, res: Response) => {
         (user._id as mongoose.Types.ObjectId).toString(),
       );
 
+      // For cross-domain cookies (different Vercel deployments)
       res.cookie("session", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
@@ -112,6 +114,8 @@ export const loginUser = async (req: Request, res: Response) => {
 export const logoutUser = (req: Request, res: Response) => {
   res.cookie("session", "", {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     expires: new Date(0),
   });
   res.status(200).json({ message: "Logged out" });
