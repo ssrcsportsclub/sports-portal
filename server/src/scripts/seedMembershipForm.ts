@@ -8,7 +8,7 @@ dotenv.config();
 const seedMembershipForms = async () => {
   try {
     await mongoose.connect(
-      process.env.MONGO_URI || "mongodb://localhost:27017/sports_club",
+      "mongodb+srv://prashantadhikareeeydev:Qrno80NploXws5u7@prod.hyjniwz.mongodb.net/sports",
     );
     console.log("MongoDB Connected");
 
