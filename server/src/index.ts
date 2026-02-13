@@ -15,9 +15,25 @@ import cookieParser from "cookie-parser";
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
+// CORS Configuration - Allow both development and production origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  process.env.CLIENT_URL, // Production frontend URL
+].filter(Boolean); // Remove undefined values
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
   }),
 );

@@ -14,8 +14,10 @@
     "@tailwindcss/vite": "^4.1.18",
     "axios": "^1.13.4",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.34.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.564.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-easy-crop": "^5.5.6",
@@ -36,6 +38,6 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.3.1"
   }
 }

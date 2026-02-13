@@ -176,7 +176,7 @@ const Members = () => {
                 >
                   {cat.label}
                 </h2>
-                <div className="h-px flex-1 bg-gradient-to-r from-zinc-200 to-transparent dark:from-zinc-800" />
+                <div className="h-px flex-1 bg-linear-to-r from-zinc-200 to-transparent dark:from-zinc-800" />
                 <span className="text-xs font-semibold text-zinc-400">
                   {catUsers.length}{" "}
                   {catUsers.length === 1 ? "Individual" : "Individuals"}

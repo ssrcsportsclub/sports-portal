@@ -324,11 +324,57 @@ export const updateSubmissionStatus = async (req: Request, res: Response) => {
     if (status === SubmissionStatus.APPROVED && createTeam) {
       const formData = submission.data;
 
-      console.log(formData.members);
+      console.log(
+        "[Team Creation] Form data:",
+        JSON.stringify(formData, null, 2),
+      );
+
+      // Extract members from form data - handle various field naming conventions
+      let members = [];
+
+      if (formData.members && Array.isArray(formData.members)) {
+        // If members array exists, use it directly
+        members = formData.members;
+      } else {
+        // Otherwise, construct a single member entry from individual fields
+        const memberEntry: any = {};
+
+        // Try to find name field (various naming conventions)
+        const nameField =
+          formData.name ||
+          formData.team_leader ||
+          formData.full_name ||
+          formData.captain_name;
+        if (nameField) memberEntry.name = nameField;
+
+        // Try to find email field
+        const emailField =
+          formData.email || formData.team_email || formData.contact_email;
+        if (emailField) memberEntry.email = emailField;
+
+        // Try to find phone field
+        const phoneField =
+          formData.phone ||
+          formData.contact ||
+          formData.phone_number ||
+          formData.mobile;
+        if (phoneField) memberEntry.phone = phoneField;
+
+        // Only add if we have at least name and email
+        if (memberEntry.name && memberEntry.email) {
+          members.push(memberEntry);
+        }
+      }
+
+      console.log(
+        "[Team Creation] Extracted members:",
+        JSON.stringify(members, null, 2),
+      );
 
       // Create team from submission data
       const team = await Team.create({
-        name: formData.team_name || formData.full_name || formData.name,
+        name:
+          formData.team_name || formData.full_name || formData.name || "Team",
         sport: (submission.form as any).formTitle.includes("Futsal")
           ? "Futsal"
           : (submission.form as any).formTitle.includes("Basketball")
@@ -347,8 +393,10 @@ export const updateSubmissionStatus = async (req: Request, res: Response) => {
             ? TeamType.MEMBER
             : TeamType.EVENT,
         formSubmission: submission._id,
-        members: formData.members || [], // Members will be added separately
+        members: members,
       });
+
+      console.log("[Team Creation] Team created successfully:", team._id);
 
       // Link team to event if applicable
       const eventSlug = (submission.form as any).formId;
@@ -360,6 +408,8 @@ export const updateSubmissionStatus = async (req: Request, res: Response) => {
 
         event.registeredTeams.push(team._id as any);
         await event.save();
+
+        console.log("[Team Creation] Team linked to event:", event.title);
       }
 
       await submission.populate("reviewedBy", "name email");

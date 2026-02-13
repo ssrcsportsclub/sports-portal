@@ -95,7 +95,7 @@ const Events = () => {
                 className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden hover:shadow-md transition-all"
               >
                 <div className="h-32 bg-zinc-100 dark:bg-zinc-800 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4">
                     <h3 className="text-lg font-bold text-white truncate">
                       {event.title}

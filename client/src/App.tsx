@@ -22,6 +22,7 @@ import Members from "./components/auth_client/pages/Members";
 import MemberRegistrations from "./components/auth_client/pages/MemberRegistrations";
 import Announcements from "./components/auth_client/pages/Announcements";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import LandingPage from "./pages/LandingPage";
 
 const router = createBrowserRouter([
   {
@@ -109,6 +110,10 @@ const router = createBrowserRouter([
   {
     path: "/",
     children: [
+      {
+        index: true,
+        element: <LandingPage />,
+      },
       {
         path: "/events",
         element: <Home />,
