@@ -234,7 +234,7 @@ const Announcements = () => {
             >
               <div className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="shrink-0 w-10 h-10 rounded-full bg-linear-to-br from-red-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
                     {getInitials(ann.author.name)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -394,7 +394,7 @@ const Announcements = () => {
               {activeCommentId === ann._id && (
                 <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 animate-in slide-in-from-top-4 duration-300">
                   <div className="flex gap-3 mb-6">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs uppercase">
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs uppercase">
                       {user ? getInitials(user.name) : "?"}
                     </div>
                     <div className="flex-1 space-y-2">

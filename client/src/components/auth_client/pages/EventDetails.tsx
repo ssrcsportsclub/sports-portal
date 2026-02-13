@@ -108,7 +108,7 @@ const EventDetails = () => {
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
         {/* Header Image / Gradient */}
         <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-6 left-6 right-6">
             {!isEditing ? (
               <h1 className="text-3xl font-bold text-white mb-2">

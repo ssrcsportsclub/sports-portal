@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { sportsData } from "../data/sports";
-import { ArrowRight, Check, Trophy, Users, Medal } from "lucide-react"; // Assuming lucide-react is available or use SVGs
 
 // Shadcn-like Card Component
 const Card = ({
