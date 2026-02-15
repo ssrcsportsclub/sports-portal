@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import api from "../../../services/api";
 import { useAppSelector } from "../../../store/hooks";
-import Modal from "../../ui/Modal";
 import MatchScoreModal from "./MatchScoreModal";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
