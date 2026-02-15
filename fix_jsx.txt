@@ -1,0 +1,10 @@
+                                        {/* Score Display - Always visible if score exists */}
+                                        {team1 && team2 && draw.matchScores?.[matchId] && (
+                                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                            <div className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                                              <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 tabular-nums tracking-widest">
+                                                {draw.matchScores[matchId]}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        )}

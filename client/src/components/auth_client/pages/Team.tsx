@@ -30,7 +30,14 @@ const Team = () => {
         // Handle array of teams (backend update)
         const teams = Array.isArray(data) ? data : [data];
 
+        const now = new Date();
         teams.forEach((team: any) => {
+          // Rule: If team has an event with an endDate, only show if not ended
+          if (team.event && team.event.endDate) {
+            const eventEnd = new Date(team.event.endDate);
+            if (now > eventEnd) return; // Skip this team
+          }
+
           // Add members
           if (team.members && Array.isArray(team.members)) {
             team.members.forEach((member: any, index: number) => {

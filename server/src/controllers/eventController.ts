@@ -20,7 +20,13 @@ export const getEvents = async (req: Request, res: Response) => {
 // @access  Public
 export const getEventById = async (req: Request, res: Response) => {
   try {
-    const event = await Event.findById(req.params.id);
+    const event = await Event.findById(req.params.id)
+      .populate({
+        path: "registeredTeams",
+        select: "name sport members teamType",
+      })
+      .populate("organizer", "name email")
+      .populate("form", "isActive formId");
     if (!event) return res.status(404).json({ message: "Event not found" });
     res.json(event);
   } catch (error) {

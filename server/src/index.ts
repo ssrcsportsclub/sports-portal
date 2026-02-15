@@ -49,6 +49,7 @@ import announcementRoutes from "./routes/announcementRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import formRoutes from "./routes/formRoutes.js";
+import drawRoutes from "./routes/drawRoutes.js";
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -60,6 +61,7 @@ app.use("/api/announcements", announcementRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/forms", formRoutes);
+app.use("/api/draws", drawRoutes);
 
 app.get("/", (req, res) => {
   res.send("Sports Club Portal API is running");

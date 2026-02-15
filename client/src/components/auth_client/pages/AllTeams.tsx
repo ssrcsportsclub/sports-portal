@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Modal from "../../ui/Modal";
 import api from "../../../services/api";
+import DrawTeamsModal from "./DrawTeamsModal";
 
 interface TeamMember {
   _id?: string;
@@ -28,21 +29,29 @@ const AllTeams = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [isDrawModalOpen, setIsDrawModalOpen] = useState(false);
+  const [preSelectedSport, setPreSelectedSport] = useState<string>("");
+  const [preSelectedEventId, setPreSelectedEventId] = useState<string>("");
+  const [events, setEvents] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchTeams = async () => {
+    const fetchData = async () => {
       try {
-        const { data } = await api.get("/teams");
-        setTeams(data);
+        const [teamsRes, eventsRes] = await Promise.all([
+          api.get("/teams"),
+          api.get("/events"),
+        ]);
+        setTeams(teamsRes.data);
+        setEvents(eventsRes.data);
       } catch (err: any) {
-        console.error("Error fetching teams:", err);
+        console.error("Error fetching data:", err);
         setError("Failed to load teams");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTeams();
+    fetchData();
   }, []);
 
   // Group teams by sport
@@ -74,7 +83,11 @@ const AllTeams = () => {
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
           All Registered Teams
         </h1>
-        <div className="text-sm text-zinc-500">{teams.length} Teams Total</div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-zinc-500">
+            {teams.length} Teams Total
+          </div>
+        </div>
       </div>
 
       {Object.keys(teamsBySport).length === 0 ? (
@@ -89,9 +102,35 @@ const AllTeams = () => {
                 {sport}
               </h2>
               <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-              <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                {sportTeams.length} {sportTeams.length === 1 ? "Team" : "Teams"}
-              </span>
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">
+                    {sportTeams.filter((t) => t.teamType === "event").length}{" "}
+                    Event Teams
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">
+                    {sportTeams.length} Total
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const sportLower = sport.toLowerCase();
+                    const matchingEvent = events.find(
+                      (e) =>
+                        e.slug === sportLower ||
+                        e.title.toLowerCase().includes(sportLower),
+                    );
+                    setPreSelectedSport(sport);
+                    if (matchingEvent) {
+                      setPreSelectedEventId(matchingEvent._id);
+                    }
+                    setIsDrawModalOpen(true);
+                  }}
+                  className="px-3 py-1 bg-[#DD1D25] text-white text-[10px] font-bold uppercase tracking-wider rounded-md hover:bg-[#C41920] transition-all transform active:scale-95 shadow-sm"
+                >
+                  Draw Teams
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -216,6 +255,19 @@ const AllTeams = () => {
           </div>
         )}
       </Modal>
+
+      <DrawTeamsModal
+        isOpen={isDrawModalOpen}
+        onClose={() => {
+          setIsDrawModalOpen(false);
+          setPreSelectedSport("");
+          setPreSelectedEventId("");
+        }}
+        teams={teams}
+        events={events}
+        initialSport={preSelectedSport}
+        initialEventId={preSelectedEventId}
+      />
     </div>
   );
 };

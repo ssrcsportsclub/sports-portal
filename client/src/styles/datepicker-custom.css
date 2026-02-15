@@ -1,0 +1,70 @@
+/* Custom DatePicker Styles for Dark Mode Support */
+.react-datepicker {
+  background-color: #18181b !important; /* zinc-900 */
+  border-color: #27272a !important; /* zinc-800 */
+  color: #f4f4f5 !important; /* zinc-100 */
+  font-family: inherit !important;
+}
+
+.react-datepicker__header {
+  background-color: #27272a !important; /* zinc-800 */
+  border-bottom-color: #3f3f46 !important; /* zinc-700 */
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header,
+.react-datepicker-year-header {
+  color: #fafafa !important; /* zinc-50 */
+}
+
+.react-datepicker__day-name,
+.react-datepicker__day,
+.react-datepicker__time-name {
+  color: #e4e4e7 !important; /* zinc-200 */
+}
+
+.react-datepicker__day:hover,
+.react-datepicker__month-text:hover,
+.react-datepicker__quarter-text:hover,
+.react-datepicker__year-text:hover {
+  background-color: #3f3f46 !important; /* zinc-700 */
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected,
+.react-datepicker__month-text--keyboard-selected,
+.react-datepicker__quarter-text--keyboard-selected,
+.react-datepicker__year-text--keyboard-selected {
+  background-color: #dd1d25 !important;
+  color: white !important;
+}
+
+.react-datepicker__time-container {
+  border-left-color: #3f3f46 !important; /* zinc-700 */
+}
+
+.react-datepicker__time-container .react-datepicker__time {
+  background-color: #18181b !important; /* zinc-900 */
+  color: #f4f4f5 !important; /* zinc-100 */
+}
+
+.react-datepicker__time-container
+  .react-datepicker__time
+  .react-datepicker__time-box
+  ul.react-datepicker__time-list
+  li.react-datepicker__time-list-item:hover {
+  background-color: #3f3f46 !important; /* zinc-700 */
+}
+
+.react-datepicker__time-container
+  .react-datepicker__time
+  .react-datepicker__time-box
+  ul.react-datepicker__time-list
+  li.react-datepicker__time-list-item--selected {
+  background-color: #dd1d25 !important;
+  color: white !important;
+}
+
+.react-datepicker__input-container input {
+  width: 100%;
+}

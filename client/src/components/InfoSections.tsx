@@ -89,7 +89,7 @@ export function DetailsSection() {
           <Card className="aspect-square flex items-center justify-center p-0 overflow-hidden group bg-neutral-900 border-neutral-800">
             {/* Abstract Visual - keeping it clean */}
             <div className="w-full h-full relative flex items-center justify-center bg-neutral-950">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neutral-800/20 via-neutral-950 to-neutral-950" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-neutral-800/20 via-neutral-950 to-neutral-950" />
               <span className="text-9xl opacity-10 group-hover:opacity-20 transition-opacity duration-500 grayscale text-white z-10">
                 ⚽
               </span>

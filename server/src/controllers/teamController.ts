@@ -24,7 +24,9 @@ export const getMyTeam = async (req: Request, res: Response) => {
     // Find teams where user is a member (by email) or executive (by ID)
     const teams = await Team.find({
       $or: [{ "members.email": req.user.email }, { executive: req.user._id }],
-    }).populate("executive", "name email");
+    })
+      .populate("executive", "name email")
+      .populate("event");
 
     res.json(teams);
   } catch (error) {
