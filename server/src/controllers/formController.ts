@@ -17,12 +17,23 @@ import {
   sendUserCredentialsEmail,
 } from "../utils/emailHelper.js";
 
-// @desc    Get all active forms
+// @desc    Get all forms (optionally include inactive for admins)
 // @route   GET /api/forms
-// @access  Public
+// @access  Public (Active only), Private (Admins can see all)
 export const getForms = async (req: Request, res: Response) => {
   try {
-    const forms = await Form.find({ isActive: true })
+    const includeInactive = req.query.includeInactive === "true";
+    const isAdminOrMod =
+      req.user &&
+      (req.user.role === UserRole.ADMIN ||
+        req.user.role === UserRole.MODERATOR);
+
+    const filter: any = {};
+    if (!includeInactive || !isAdminOrMod) {
+      filter.isActive = true;
+    }
+
+    const forms = await Form.find(filter)
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
     res.json(forms);
@@ -76,11 +87,20 @@ export const createForm = async (req: Request, res: Response) => {
       createdBy: req.user!._id,
     });
 
-    // Automatically create an event for this form, unless it's a registration form or explicitly excluded
-    if (
-      !formId.toLowerCase().includes("registration") &&
-      !formTitle.toLowerCase().includes("form")
-    ) {
+    // Automatically create an event for this form, unless it's a general member registration form
+    const isMembershipForm =
+      formId.toLowerCase().includes("member") ||
+      formId.toLowerCase().includes("staff") ||
+      (formTitle.toLowerCase().includes("registration") &&
+        !formTitle.toLowerCase().includes("futsal") &&
+        !formTitle.toLowerCase().includes("tournament") &&
+        !formTitle.toLowerCase().includes("basketball") &&
+        !formTitle.toLowerCase().includes("chess") &&
+        !formTitle.toLowerCase().includes("pool") &&
+        !formTitle.toLowerCase().includes("badminton") &&
+        !formTitle.toLowerCase().includes("table tennis"));
+
+    if (!isMembershipForm) {
       // Use a default date and location since they aren't part of form creation yet
       // In a real scenario, these might be passed in req.body or updated later
       const defaultDate = new Date();
@@ -164,6 +184,29 @@ export const deleteForm = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Hard delete form (permanent)
+// @route   DELETE /api/forms/:formId/hard
+// @access  Private (Admin only)
+export const hardDeleteForm = async (req: Request, res: Response) => {
+  try {
+    const form = await Form.findOne({ formId: req.params.formId });
+
+    if (!form) {
+      return res.status(404).json({ message: "Form not found" });
+    }
+
+    // Delete all submissions associated with this form
+    await FormSubmission.deleteMany({ form: form._id });
+
+    // Delete the form itself
+    await form.deleteOne();
+
+    res.json({ message: "Form and all associated data permanently removed" });
+  } catch (error) {
+    res.status(500).json({ message: (error as Error).message });
+  }
+};
+
 // @desc    Submit form data
 // @route   POST /api/forms/:formId/submit
 // @access  Private (Authenticated users)
@@ -220,6 +263,25 @@ export const submitForm = async (req: Request, res: Response) => {
         return res.status(400).json({
           message:
             "You have already submitted a form for this event with this email address.",
+        });
+      }
+    }
+
+    // Check for duplicate members within the same submission
+    if (req.body.members && Array.isArray(req.body.members)) {
+      const memberEmails = req.body.members
+        .map((m: any) => m.email?.toLowerCase())
+        .filter((email: string) => email);
+
+      const uniqueEmails = new Set(memberEmails);
+      if (uniqueEmails.size !== memberEmails.length) {
+        // Find which email is duplicated for a better error message
+        const duplicates = memberEmails.filter(
+          (email: string, index: number) =>
+            memberEmails.indexOf(email) !== index,
+        );
+        return res.status(400).json({
+          message: `Duplicate member email found: ${duplicates[0]}. Each team member must have a unique email.`,
         });
       }
     }

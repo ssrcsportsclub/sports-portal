@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../../../store/hooks";
-import { getForms, deleteForm } from "../../../store/slices/formSlice";
+import {
+  getForms,
+  deleteForm,
+  hardDeleteForm,
+  updateForm,
+} from "../../../store/slices/formSlice";
 import { FormSubmissions } from "./FormSubmissions";
 
 // Icons
@@ -87,27 +92,53 @@ export const ManageForms = () => {
   const dispatch = useAppDispatch();
   const { forms, loading } = useAppSelector((state) => state.form);
   const { user } = useAppSelector((state) => state.auth);
+  const [activeTab, setActiveTab] = useState<"active" | "deactivated">(
+    "active",
+  );
   const [viewingSubmissionsId, setViewingSubmissionsId] = useState<
     string | null
   >(null);
 
   useEffect(() => {
-    dispatch(getForms());
+    dispatch(getForms({ includeInactive: true }));
   }, [dispatch]);
 
   const handleDelete = (formId: string) => {
     if (
       window.confirm(
-        "Are you sure you want to delete this form? This will also remove all associated submissions.",
+        "Are you sure you want to deactivate this form? Students will no longer be able to submit it.",
       )
     ) {
       dispatch(deleteForm(formId));
     }
   };
 
-  const filteredForms = forms.filter(
-    (form) => !(user?.role === "moderator" && form.formId === "registration"),
-  );
+  const handleHardDelete = (formId: string) => {
+    if (
+      window.confirm(
+        "CRITICAL ACTION: Are you sure you want to PERMANENTLY delete this form and ALL its submissions? This cannot be undone.",
+      )
+    ) {
+      if (
+        window.confirm("Please confirm one last time. All data will be wiped.")
+      ) {
+        dispatch(hardDeleteForm(formId));
+      }
+    }
+  };
+
+  const handleRestore = (formId: string) => {
+    dispatch(updateForm({ formId, data: { isActive: true } }));
+  };
+
+  const filteredForms = forms.filter((form) => {
+    const isHiddenReg =
+      user?.role === "moderator" && form.formId === "registration";
+    if (isHiddenReg) return false;
+
+    if (activeTab === "active") return form.isActive;
+    return !form.isActive;
+  });
 
   if (viewingSubmissionsId) {
     const activeForm = forms.find((f) => f.formId === viewingSubmissionsId);
@@ -137,6 +168,30 @@ export const ManageForms = () => {
 
   return (
     <div className="space-y-6">
+      {/* Tabs */}
+      <div className="flex gap-4 border-b border-zinc-200 dark:border-zinc-800">
+        <button
+          onClick={() => setActiveTab("active")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "active"
+              ? "border-[#DD1D25] text-[#DD1D25]"
+              : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          Active Forms
+        </button>
+        <button
+          onClick={() => setActiveTab("deactivated")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "deactivated"
+              ? "border-[#DD1D25] text-[#DD1D25]"
+              : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          Deactivated Forms
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {loading && forms.length === 0 ? (
           <div className="col-span-full flex justify-center p-12">
@@ -146,12 +201,12 @@ export const ManageForms = () => {
           <div className="col-span-full text-center p-12 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-800">
             <ClipboardListIcon className="w-12 h-12 text-zinc-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-1">
-              No forms to manage
+              No {activeTab} forms found
             </h3>
             <p className="text-sm text-zinc-500">
-              {user?.role === "moderator"
-                ? "You do not have any forms assigned to you."
-                : "Create your first form to start collecting submissions."}
+              {activeTab === "active"
+                ? "Start adding forms to see them here."
+                : "Inactive forms will appear in this section."}
             </p>
           </div>
         ) : (
@@ -169,7 +224,7 @@ export const ManageForms = () => {
                     <span
                       className={`inline-flex items-center px-1.5 py-0.5 rounded ${form.isActive ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800"}`}
                     >
-                      {form.isActive ? "Active" : "Draft"}
+                      {form.isActive ? "Active" : "Inactive"}
                     </span>
                     <span>•</span>
                     <span>ID: {form.formId}</span>
@@ -185,13 +240,32 @@ export const ManageForms = () => {
                   <UsersIcon className="w-4 h-4" />
                   Submissions
                 </button>
-                <button
-                  onClick={() => handleDelete(form.formId)}
-                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 text-red-600 text-sm font-medium transition-all"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                  Delete
-                </button>
+                {form.isActive ? (
+                  <button
+                    onClick={() => handleDelete(form.formId)}
+                    className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 text-sm font-medium transition-all"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleRestore(form.formId)}
+                    className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-900/10 dark:hover:bg-green-900/20 text-green-600 text-sm font-medium transition-all"
+                  >
+                    Restore
+                  </button>
+                )}
+                {!form.isActive &&
+                  (user?.role === "admin" || user?.role === "superuser") && (
+                    <button
+                      onClick={() => handleHardDelete(form.formId)}
+                      className="col-span-2 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 text-red-600 text-sm font-medium transition-all border border-red-100 dark:border-red-900/30"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      Permanently Delete
+                    </button>
+                  )}
               </div>
             </div>
           ))

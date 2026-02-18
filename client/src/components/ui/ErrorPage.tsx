@@ -24,8 +24,8 @@ const ErrorPage: React.FC = () => {
       </div>
 
       <div className="relative mb-12">
-        <h1 className="text-[14rem] font-black tracking-tighter text-white/[0.03] leading-none select-none md:text-[20rem]">
-          {isRouteErrorResponse(error) ? error.status : "500"}
+        <h1 className="text-[14rem] font-black tracking-tighter text-white/5 leading-none select-none md:text-[20rem]">
+          {isRouteErrorResponse(error) ? error.status : "404"}
         </h1>
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="h-32 w-[2px] bg-linear-to-b from-transparent via-[#DD1D25] to-transparent shadow-[0_0_15px_rgba(221,29,37,0.5)]"></div>
@@ -42,10 +42,10 @@ const ErrorPage: React.FC = () => {
 
         <div className="pt-6">
           <Link
-            to="/dashboard"
+            to="/"
             className="group relative inline-flex items-center justify-center px-8 py-3.5 font-bold text-white transition-all duration-300 bg-[#DD1D25] rounded-full hover:bg-[#C11920] active:scale-95 shadow-xl shadow-red-900/20"
           >
-            <span>Return to Dashboard</span>
+            <span>Return to Home</span>
             <svg
               className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1.5"
               fill="none"

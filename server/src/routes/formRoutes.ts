@@ -5,6 +5,7 @@ import {
   createForm,
   updateForm,
   deleteForm,
+  hardDeleteForm,
   submitForm,
   getFormSubmissions,
   updateSubmissionStatus,
@@ -14,13 +15,17 @@ import {
   bulkUpdateMemberRegistrationStatus,
 } from "../controllers/formController.js";
 import { sendOTP, verifyOTP } from "../controllers/otpController.js";
-import { protect, authorize } from "../middlewares/authMiddleware.js";
+import {
+  protect,
+  authorize,
+  optionalProtect,
+} from "../middlewares/authMiddleware.js";
 import { UserRole } from "../models/User.js";
 
 const router = express.Router();
 
 // Public routes
-router.get("/", getForms);
+router.get("/", optionalProtect, getForms);
 router.get("/:formId", getFormById);
 router.post("/otp/send", sendOTP);
 router.post("/otp/verify", verifyOTP);
@@ -34,6 +39,12 @@ router.put(
   updateForm,
 );
 router.delete("/:formId", protect, authorize(UserRole.ADMIN), deleteForm);
+router.delete(
+  "/:formId/hard",
+  protect,
+  authorize(UserRole.ADMIN),
+  hardDeleteForm,
+);
 
 // Form submission routes
 router.post("/:formId/submit", submitForm);

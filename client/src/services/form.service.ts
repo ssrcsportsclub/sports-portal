@@ -2,8 +2,10 @@ import api from "./api";
 import type { Form, FormSubmission, SubmissionStatus } from "../types";
 
 export const formService = {
-  getForms: async () => {
-    const response = await api.get<Form[]>("/forms");
+  getForms: async (includeInactive?: boolean) => {
+    const response = await api.get<Form[]>(
+      `/forms${includeInactive ? "?includeInactive=true" : ""}`,
+    );
     return response.data;
   },
 
@@ -24,6 +26,11 @@ export const formService = {
 
   deleteForm: async (formId: string) => {
     const response = await api.delete(`/forms/${formId}`);
+    return response.data;
+  },
+
+  hardDeleteForm: async (formId: string) => {
+    const response = await api.delete(`/forms/${formId}/hard`);
     return response.data;
   },
 
