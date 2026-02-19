@@ -274,6 +274,7 @@ export const submitForm = async (req: Request, res: Response) => {
 
       const existingMember = await MemberRegistration.findOne({
         $or: [{ email }, { collegeId }],
+        status: { $ne: RegistrationStatus.REJECTED },
       });
 
       if (existingMember) {
