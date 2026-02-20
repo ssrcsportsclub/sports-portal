@@ -21,14 +21,21 @@ import {
   optionalProtect,
 } from "../middlewares/authMiddleware.js";
 import { UserRole } from "../models/User.js";
+import { otpLimiter } from "../middlewares/rateLimiter.js";
+import { validateBody } from "../middlewares/validateRequest.js";
+import {
+  formSubmissionSchema,
+  otpRequestSchema,
+  otpVerifySchema,
+} from "../schemas/index.js";
 
 const router = express.Router();
 
 // Public routes
 router.get("/", optionalProtect, getForms);
 router.get("/:formId", getFormById);
-router.post("/otp/send", sendOTP);
-router.post("/otp/verify", verifyOTP);
+router.post("/otp/send", otpLimiter, validateBody(otpRequestSchema), sendOTP);
+router.post("/otp/verify", validateBody(otpVerifySchema), verifyOTP);
 
 // Form management routes (Admin + Moderator)
 router.post("/", protect, authorize(UserRole.ADMIN), createForm);
@@ -47,13 +54,14 @@ router.delete(
 );
 
 // Form submission routes
-router.post("/:formId/submit", submitForm);
+router.post("/:formId/submit", validateBody(formSubmissionSchema), submitForm);
 router.get(
   "/:formId/submissions",
   protect,
   authorize(UserRole.ADMIN, UserRole.MODERATOR),
   getFormSubmissions,
 );
+// ... existing code below ...
 
 // All submissions route
 router.get(

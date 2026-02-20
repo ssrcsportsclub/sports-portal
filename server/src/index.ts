@@ -11,10 +11,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 import cookieParser from "cookie-parser";
+import { apiLimiter } from "./middlewares/rateLimiter.js";
+import { errorHandler } from "./middlewares/errorMiddleware.js";
 
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
+app.set("trust proxy", 1); // Trust first proxy (e.g. Vercel, Heroku, Nginx)
+app.use("/api", apiLimiter); // Apply general rate limit to all /api routes
 // CORS Configuration - Allow both development and production origins
 const allowedOrigins = [
   "http://localhost:5173",
@@ -64,6 +68,9 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/forms", formRoutes);
 app.use("/api/draws", drawRoutes);
 app.use("/api/notifications", notificationRoutes);
+
+// Error Handling
+app.use(errorHandler);
 
 app.get("/", (req, res) => {
   res.send("Sports Club Portal API is running");

@@ -216,8 +216,6 @@ export const hardDeleteForm = async (req: Request, res: Response) => {
 // @access  Private (Authenticated users)
 export const submitForm = async (req: Request, res: Response) => {
   try {
-    console.log(req.body);
-
     const form = await Form.findOne({
       formId: req.params.formId,
       isActive: true,
@@ -286,7 +284,7 @@ export const submitForm = async (req: Request, res: Response) => {
 
       const registration = await MemberRegistration.create({
         name,
-        
+
         email,
         phone,
         collegeId,
