@@ -577,16 +577,14 @@ export function EsportsCommunitySection() {
                 className="flex items-center gap-3 pb-4 border-b"
                 style={{ borderColor: "#2b2d31" }}
               >
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 bg-white">
-                  <img
-                    src={logoMain}
-                    alt="SSRC Logo"
-                    className="w-8 h-8 object-contain"
-                  />
-                </div>
+                <img
+                  src={logoMain}
+                  alt="SSRC Logo"
+                  className="w-8 h-8 object-contain"
+                />
                 <div>
                   <p className="font-bold text-white text-sm">
-                    SSRC Sports Club
+                    SSRC Esports Hub
                   </p>
                   <p className="text-xs text-neutral-500">
                     Official Discord Server
@@ -616,7 +614,7 @@ export function EsportsCommunitySection() {
               ))}
 
               <a
-                href="https://discord.gg/ssrcsports"
+                href="https://discord.gg/FRV9aXuWuT"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full text-center py-2.5 rounded-lg text-sm font-bold text-white transition-all hover:opacity-90"
