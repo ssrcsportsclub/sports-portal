@@ -157,12 +157,12 @@ export default function LoginForm() {
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-neutral-400">
-            Apply for membership via the{" "}
+            Don't have an account?{" "}
             <a
-              href={`${window.location.origin}/form/atudent-registration`}
+              href={`${window.location.origin}/form/student-registration`}
               className="font-medium text-white hover:underline"
             >
-              Portal Registration Form
+              Apply for membership
             </a>
           </p>
         </div>
