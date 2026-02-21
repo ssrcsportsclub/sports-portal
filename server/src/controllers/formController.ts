@@ -17,12 +17,23 @@ import {
   sendUserCredentialsEmail,
 } from "../utils/emailHelper.js";
 
-// @desc    Get all active forms
+// @desc    Get all forms (optionally include inactive for admins)
 // @route   GET /api/forms
-// @access  Public
+// @access  Public (Active only), Private (Admins can see all)
 export const getForms = async (req: Request, res: Response) => {
   try {
-    const forms = await Form.find({ isActive: true })
+    const includeInactive = req.query.includeInactive === "true";
+    const isAdminOrMod =
+      req.user &&
+      (req.user.role === UserRole.ADMIN ||
+        req.user.role === UserRole.MODERATOR);
+
+    const filter: any = {};
+    if (!includeInactive || !isAdminOrMod) {
+      filter.isActive = true;
+    }
+
+    const forms = await Form.find(filter)
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
     res.json(forms);
@@ -76,11 +87,20 @@ export const createForm = async (req: Request, res: Response) => {
       createdBy: req.user!._id,
     });
 
-    // Automatically create an event for this form, unless it's a registration form or explicitly excluded
-    if (
-      !formId.toLowerCase().includes("registration") &&
-      !formTitle.toLowerCase().includes("form")
-    ) {
+    // Automatically create an event for this form, unless it's a general member registration form
+    const isMembershipForm =
+      formId.toLowerCase().includes("member") ||
+      formId.toLowerCase().includes("staff") ||
+      (formTitle.toLowerCase().includes("registration") &&
+        !formTitle.toLowerCase().includes("futsal") &&
+        !formTitle.toLowerCase().includes("tournament") &&
+        !formTitle.toLowerCase().includes("basketball") &&
+        !formTitle.toLowerCase().includes("chess") &&
+        !formTitle.toLowerCase().includes("pool") &&
+        !formTitle.toLowerCase().includes("badminton") &&
+        !formTitle.toLowerCase().includes("table tennis"));
+
+    if (!isMembershipForm) {
       // Use a default date and location since they aren't part of form creation yet
       // In a real scenario, these might be passed in req.body or updated later
       const defaultDate = new Date();
@@ -117,10 +137,14 @@ export const updateForm = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Form not found" });
     }
 
-    // Restriction: Moderators cannot update registration form
+    // Restriction: Moderators cannot update registration/membership forms
+    const membershipFormIdsList = [
+      "student-registration",
+      "general-member-registration",
+    ];
     if (
       req.user!.role === UserRole.MODERATOR &&
-      req.params.formId === "registration"
+      membershipFormIdsList.includes(req.params.formId)
     ) {
       return res.status(403).json({
         message:
@@ -164,13 +188,34 @@ export const deleteForm = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Hard delete form (permanent)
+// @route   DELETE /api/forms/:formId/hard
+// @access  Private (Admin only)
+export const hardDeleteForm = async (req: Request, res: Response) => {
+  try {
+    const form = await Form.findOne({ formId: req.params.formId });
+
+    if (!form) {
+      return res.status(404).json({ message: "Form not found" });
+    }
+
+    // Delete all submissions associated with this form
+    await FormSubmission.deleteMany({ form: form._id });
+
+    // Delete the form itself
+    await form.deleteOne();
+
+    res.json({ message: "Form and all associated data permanently removed" });
+  } catch (error) {
+    res.status(500).json({ message: (error as Error).message });
+  }
+};
+
 // @desc    Submit form data
 // @route   POST /api/forms/:formId/submit
 // @access  Private (Authenticated users)
 export const submitForm = async (req: Request, res: Response) => {
   try {
-    console.log(req.body);
-
     const form = await Form.findOne({
       formId: req.params.formId,
       isActive: true,
@@ -209,6 +254,53 @@ export const submitForm = async (req: Request, res: Response) => {
         });
       }
     }
+    const membershipFormIds = [
+      "general-member-registration",
+      "student-registration",
+    ];
+    const isMembershipSubmission = membershipFormIds.includes(
+      req.params.formId,
+    );
+
+    if (isMembershipSubmission) {
+      // --- Membership Registration path: only save to MemberRegistration ---
+      const { name, email, phone, collegeId, sportsInterests } = req.body;
+      const appliedRole =
+        req.params.formId === "general-member-registration"
+          ? AppliedRole.SC_MEMBER
+          : AppliedRole.GENERAL_MEMBER;
+
+      const existingMember = await MemberRegistration.findOne({
+        $or: [{ email }, { collegeId }],
+        status: { $ne: RegistrationStatus.REJECTED },
+      });
+
+      if (existingMember) {
+        return res.status(400).json({
+          message:
+            "You have already submitted a membership application with this email address or college ID.",
+        });
+      }
+
+      const registration = await MemberRegistration.create({
+        name,
+
+        email,
+        phone,
+        collegeId,
+        appliedRole,
+        sportsInterests,
+        status: RegistrationStatus.PENDING,
+      });
+
+      // Send confirmation email
+      await sendMembershipApplicationEmail(email, name, appliedRole);
+
+      return res.status(201).json(registration);
+    }
+
+    // --- Regular form path: save to FormSubmission ---
+
     // Check for duplicate submission by email for this specific form
     if (req.body.email) {
       const existingSubmission = await FormSubmission.findOne({
@@ -224,37 +316,31 @@ export const submitForm = async (req: Request, res: Response) => {
       }
     }
 
+    // Check for duplicate members within the same submission
+    if (req.body.members && Array.isArray(req.body.members)) {
+      const memberEmails = req.body.members
+        .map((m: any) => m.email?.toLowerCase())
+        .filter((email: string) => email);
+
+      const uniqueEmails = new Set(memberEmails);
+      if (uniqueEmails.size !== memberEmails.length) {
+        // Find which email is duplicated for a better error message
+        const duplicates = memberEmails.filter(
+          (email: string, index: number) =>
+            memberEmails.indexOf(email) !== index,
+        );
+        return res.status(400).json({
+          message: `Duplicate member email found: ${duplicates[0]}. Each team member must have a unique email.`,
+        });
+      }
+    }
+
     const submission = await FormSubmission.create({
       form: form._id,
       submittedBy: req.body.name || req.body.field_1,
       data: req.body,
       status: SubmissionStatus.PENDING,
     });
-
-    const membershipFormIds = [
-      "sc-member-registration",
-      "general-member-registration",
-    ];
-    if (membershipFormIds.includes(req.params.formId)) {
-      const { name, email, phone, collegeId, sportsInterests } = req.body;
-      const appliedRole =
-        req.params.formId === "sc-member-registration"
-          ? AppliedRole.SC_MEMBER
-          : AppliedRole.GENERAL_MEMBER;
-
-      await MemberRegistration.create({
-        name,
-        email,
-        phone,
-        collegeId,
-        appliedRole,
-        sportsInterests,
-        status: RegistrationStatus.PENDING,
-      });
-
-      // Send confirmation email
-      await sendMembershipApplicationEmail(email, name, appliedRole);
-    }
 
     res.status(201).json(submission);
   } catch (error) {
@@ -277,7 +363,8 @@ export const getFormSubmissions = async (req: Request, res: Response) => {
     // Restriction: Moderators cannot view registration form submissions
     if (
       req.user!.role === UserRole.MODERATOR &&
-      req.params.formId === "registration"
+      (req.params.formId === "student-registration" ||
+        req.params.formId === "general-member-registration")
     ) {
       return res.status(403).json({
         message:
@@ -394,21 +481,12 @@ export const updateSubmissionStatus = async (req: Request, res: Response) => {
         const team = await Team.create({
           name:
             formData.team_name || formData.full_name || formData.name || "Team",
-          sport: (submission.form as any).formTitle.includes("Futsal")
-            ? "Futsal"
-            : (submission.form as any).formTitle.includes("Basketball")
-              ? "Basketball"
-              : (submission.form as any).formTitle.includes("Chess")
-                ? "Chess"
-                : (submission.form as any).formTitle.includes("Pool")
-                  ? "Pool"
-                  : (submission.form as any).formTitle.includes("Badminton")
-                    ? "Badminton"
-                    : (submission.form as any).formTitle.includes(
-                          "Table Tennis",
-                        )
-                      ? "Table Tennis"
-                      : "General",
+          sport: (submission.form as any).formTitle
+            .replace(/Registration/gi, "")
+            .replace(/Form/gi, "")
+            .replace(/Enrollment/gi, "")
+            .replace(/\s\s+/g, " ")
+            .trim(),
           teamType:
             (submission.form as any).formId === "registration"
               ? TeamType.MEMBER
@@ -458,11 +536,20 @@ export const getAllSubmissions = async (req: Request, res: Response) => {
       filter.status = status;
     }
 
-    // Restriction: If moderator, exclude registration form submissions
+    // Restriction: If moderator, exclude membership form submissions
     if (req.user!.role === UserRole.MODERATOR) {
-      const dbForm = await Form.findOne({ formId: "registration" });
-      if (dbForm) {
-        filter.form = { $ne: dbForm._id };
+      const membershipForms = await Form.find({
+        formId: {
+          $in: [
+            "registration",
+            "student-registration",
+            "general-member-registration",
+          ],
+        },
+      }).select("_id");
+      const membershipFormIds = membershipForms.map((f) => f._id);
+      if (membershipFormIds.length > 0) {
+        filter.form = { $nin: membershipFormIds };
       }
     }
 

@@ -26,9 +26,12 @@ const initialState: FormState = {
 
 export const getForms = createAsyncThunk(
   "forms/getAll",
-  async (_, { rejectWithValue }) => {
+  async (
+    params: { includeInactive?: boolean } | undefined,
+    { rejectWithValue },
+  ) => {
     try {
-      return await formService.getForms();
+      return await formService.getForms(params?.includeInactive);
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }
@@ -76,6 +79,18 @@ export const deleteForm = createAsyncThunk(
   async (formId: string, { rejectWithValue }) => {
     try {
       await formService.deleteForm(formId);
+      return formId;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || error.message);
+    }
+  },
+);
+
+export const hardDeleteForm = createAsyncThunk(
+  "forms/hardDelete",
+  async (formId: string, { rejectWithValue }) => {
+    try {
+      await formService.hardDeleteForm(formId);
       return formId;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || error.message);
@@ -222,9 +237,28 @@ const formSlice = createSlice({
       })
       .addCase(deleteForm.fulfilled, (state, action: PayloadAction<string>) => {
         state.loading = false;
-        state.forms = state.forms.filter((f) => f.formId !== action.payload);
+        // Just update the status if we're doing a soft delete
+        state.forms = state.forms.map((f) =>
+          f.formId === action.payload ? { ...f, isActive: false } : f,
+        );
       })
       .addCase(deleteForm.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Hard Delete Form
+      .addCase(hardDeleteForm.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(
+        hardDeleteForm.fulfilled,
+        (state, action: PayloadAction<string>) => {
+          state.loading = false;
+          state.forms = state.forms.filter((f) => f.formId !== action.payload);
+        },
+      )
+      .addCase(hardDeleteForm.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })

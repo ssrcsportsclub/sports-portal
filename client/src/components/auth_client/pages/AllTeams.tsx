@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Modal from "../../ui/Modal";
 import api from "../../../services/api";
 import DrawTeamsModal from "./DrawTeamsModal";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 interface TeamMember {
   _id?: string;
@@ -89,9 +90,7 @@ const AllTeams = () => {
   );
 
   if (loading) {
-    return (
-      <div className="p-10 text-center text-zinc-500">Loading all teams...</div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error) {

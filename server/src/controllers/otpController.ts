@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { Request, Response } from "express";
 import OTP from "../models/OTP.js";
 import Form from "../models/Form.js";
@@ -5,7 +6,7 @@ import { sendOTPEmail } from "../utils/emailHelper.js";
 
 // Generate a 6-digit OTP
 const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 999999).toString();
 };
 
 export const sendOTP = async (req: Request, res: Response) => {

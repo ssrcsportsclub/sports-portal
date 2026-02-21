@@ -4,6 +4,7 @@ import { useAppSelector } from "../../../store/hooks";
 import type { Equipment, Responsibility } from "../../../types";
 import { RequestStatus } from "../../../types";
 import { toast } from "react-hot-toast";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 const RequestEquipments = () => {
   const { user } = useAppSelector((state) => state.auth);
@@ -156,7 +157,7 @@ const RequestEquipments = () => {
     });
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <LoadingSpinner />;
 
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto">

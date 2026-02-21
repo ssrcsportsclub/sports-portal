@@ -3,6 +3,7 @@ import api from "../../../services/api";
 import { format } from "date-fns";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 interface Registration {
   _id: string;
@@ -296,9 +297,7 @@ const MemberRegistrations = () => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DD1D25]"></div>
-        </div>
+        <LoadingSpinner />
       ) : registrations.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800">
           <p className="text-zinc-500">No registration requests found.</p>

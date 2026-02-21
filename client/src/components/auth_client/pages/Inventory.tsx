@@ -6,6 +6,7 @@ import { toast } from "react-hot-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import Modal from "../../ui/Modal";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 const Inventory = () => {
   const [items, setItems] = useState<Equipment[]>([]);
@@ -229,7 +230,7 @@ const Inventory = () => {
     }
   };
 
-  if (loading) return <div>Loading Inventory...</div>;
+  if (loading) return <LoadingSpinner />;
 
   const pendingRequests = responsibilities.filter(
     (r) => r.status === RequestStatus.PENDING,

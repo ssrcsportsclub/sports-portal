@@ -3,6 +3,7 @@ import Modal from "../../ui/Modal";
 import api from "../../../services/api";
 import { useAppSelector } from "../../../store/hooks";
 import { Link } from "react-router-dom";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 const Team = () => {
   interface TeamMember {
@@ -86,9 +87,7 @@ const Team = () => {
   return (
     <div className="p-6 space-y-8">
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="text-zinc-500">Loading teams...</div>
-        </div>
+        <LoadingSpinner />
       ) : error ? (
         <div className="text-red-500 text-center">{error}</div>
       ) : Object.keys(membersBySport).length === 0 ? (

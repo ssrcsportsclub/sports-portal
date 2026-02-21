@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../../../services/api";
 import { useAppSelector } from "../../../store/hooks";
 import Modal from "../../ui/Modal";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 interface User {
   _id: string;
@@ -117,11 +118,7 @@ const Members = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="p-10 text-center text-zinc-500 font-medium">
-        Loading members directory...
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error) {

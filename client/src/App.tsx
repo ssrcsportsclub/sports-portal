@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import LoginForm from "./components/no_auth/Login";
 import DynamicForm from "./components/no_auth/open_forms/DynamicForm";
 import Home from "./pages/Home";
+import ErrorPage from "./components/ui/ErrorPage";
 import { store } from "./store/store";
 import { Provider } from "react-redux";
 import RootComp from "./components/auth_client/root/RootComp";
@@ -29,83 +30,92 @@ import { Toaster } from "react-hot-toast";
 const router = createBrowserRouter([
   {
     path: "/dashboard",
-    element: (
-      <ProtectedRoute>
-        <RootComp />
-      </ProtectedRoute>
-    ),
+    errorElement: <ErrorPage />,
     children: [
       {
-        index: true,
-        element: <Announcements />,
+        element: (
+          <ProtectedRoute>
+            <RootComp />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Announcements />,
+          },
+          {
+            path: "events",
+            element: <Events />,
+          },
+          {
+            path: "events/:id",
+            element: <EventDetails />,
+          },
+          {
+            path: "equipments",
+            element: <RequestEquipments />,
+          },
+          {
+            path: "team",
+            element: <Team />,
+          },
+          {
+            path: "all-teams",
+            element: <AllTeams />,
+          },
+          {
+            path: "profile",
+            element: <Profile />,
+          },
+          {
+            path: "forms",
+            element: <Forms />,
+          },
+          {
+            path: "bug-report",
+            element: <ReportBug />,
+          },
+          {
+            path: "feedback",
+            element: <Feedback />,
+          },
+          {
+            path: "my-events",
+            element: <MyEvents />,
+          },
+          {
+            path: "all-events",
+            element: <AllEvents />,
+          },
+          {
+            path: "members",
+            element: <Members />,
+          },
+          {
+            path: "membership-requests",
+            element: <MemberRegistrations />,
+          },
+          {
+            path: "settings",
+            element: <Settings />,
+          },
+          {
+            path: "announcements",
+            element: <Announcements />,
+          },
+          {
+            path: "inventory",
+            element: <Inventory />,
+          },
+          {
+            path: "user-feedback",
+            element: <FeedbackList />,
+          },
+        ],
       },
       {
-        path: "events",
-        element: <Events />,
-      },
-      {
-        path: "events/:id",
-        element: <EventDetails />,
-      },
-      {
-        path: "equipments",
-        element: <RequestEquipments />,
-      },
-      {
-        path: "team",
-        element: <Team />,
-      },
-      {
-        path: "all-teams",
-        element: <AllTeams />,
-      },
-      {
-        path: "profile",
-        element: <Profile />,
-      },
-      {
-        path: "forms",
-        element: <Forms />,
-      },
-      {
-        path: "bug-report",
-        element: <ReportBug />,
-      },
-      {
-        path: "feedback",
-        element: <Feedback />,
-      },
-      {
-        path: "my-events",
-        element: <MyEvents />,
-      },
-      {
-        path: "all-events",
-        element: <AllEvents />,
-      },
-      {
-        path: "members",
-        element: <Members />,
-      },
-      {
-        path: "membership-requests",
-        element: <MemberRegistrations />,
-      },
-      {
-        path: "settings",
-        element: <Settings />,
-      },
-      {
-        path: "announcements",
-        element: <Announcements />,
-      },
-      {
-        path: "inventory",
-        element: <Inventory />,
-      },
-      {
-        path: "user-feedback",
-        element: <FeedbackList />,
+        path: "*",
+        element: <ErrorPage />,
       },
     ],
   },
@@ -116,6 +126,7 @@ const router = createBrowserRouter([
 
   {
     path: "/",
+    errorElement: <ErrorPage />,
     children: [
       {
         index: true,
@@ -128,6 +139,10 @@ const router = createBrowserRouter([
       {
         path: "/form/:formId",
         element: <DynamicForm />,
+      },
+      {
+        path: "*",
+        element: <ErrorPage />,
       },
     ],
   },

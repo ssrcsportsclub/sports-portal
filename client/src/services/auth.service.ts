@@ -38,14 +38,4 @@ export const authService = {
   logout: async () => {
     await api.post("/auth/logout");
   },
-
-  // Get current user from localStorage (Deprecated: Always null)
-  getCurrentUser: (): AuthResponse | null => {
-    return null;
-  },
-
-  // Check if user is authenticated (Deprecated: Always false initially)
-  isAuthenticated: (): boolean => {
-    return false;
-  },
 };
