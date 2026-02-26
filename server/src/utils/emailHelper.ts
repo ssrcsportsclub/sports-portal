@@ -20,6 +20,26 @@ export const getTransporter = () => {
   });
 };
 
+export const getOfficialTransporter = () => {
+  const user = process.env.EMAIL_USER_OFFICIAL;
+  const pass = process.env.EMAIL_PASS_OFFICIAL;
+
+  if (!user || !pass) {
+    console.error(
+      "CRITICAL: EMAIL_USER_OFFICIAL or EMAIL_PASS_OFFICIAL not found in environment variables",
+    );
+    throw new Error("Official email configuration missing");
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: user,
+      pass: pass,
+    },
+  });
+};
+
 export const sendOTPEmail = async (email: string, otpCode: string) => {
   const mailOptions = {
     from: `"Sports Club Portal" <${process.env.EMAIL_USER}>`,
@@ -216,6 +236,168 @@ export const sendMembershipStatusEmail = async (
     console.log(`[Email] Status update sent to ${email}`);
   } catch (error) {
     console.error("[Email] Failed to send status email:", error);
+  }
+};
+
+// --- Meeting Invitation ---
+interface MeetingInvitationParams {
+  to: string;
+  recipientName: string;
+  title: string;
+  topic: string;
+  date: string; // ISO date string
+  time: string; // "HH:mm"
+  location: string;
+  meetingLink?: string;
+  type: "virtual" | "physical";
+  venue?: string;
+  roomNo?: string;
+  allParticipants: string[]; // all participant emails for .ics guests
+}
+
+export const sendMeetingInvitationEmail = async (
+  params: MeetingInvitationParams,
+) => {
+  const { createEvent } = await import("ics");
+
+  const {
+    to,
+    recipientName,
+    title,
+    topic,
+    date,
+    time,
+    location,
+    meetingLink,
+    type,
+    venue,
+    roomNo,
+  } = params;
+
+  // Parse date and time for the .ics event
+  const meetingDate = new Date(date);
+  const [hours, minutes] = time.split(":").map(Number);
+  const year = meetingDate.getFullYear();
+  const month = meetingDate.getMonth() + 1; // ics uses 1-indexed months
+  const day = meetingDate.getDate();
+
+  const formattedDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const formattedTime = time;
+
+  // Build location display for table row
+  let locationLabel = "";
+  let locationHtml = "";
+  if (type === "virtual" && meetingLink) {
+    // Extract a short label like "Google Meet" from the URL
+    let linkLabel = "Meeting Link";
+    if (meetingLink.includes("meet.google.com")) linkLabel = "Google Meet";
+    else if (meetingLink.includes("zoom.us")) linkLabel = "Zoom";
+    else if (meetingLink.includes("teams.microsoft")) linkLabel = "MS Teams";
+
+    locationHtml = `<a href="${meetingLink}" style="color: #DD1D25; text-decoration: none; font-weight: 500;">${linkLabel}</a>`;
+  } else {
+    locationLabel = venue || "";
+    if (roomNo) locationLabel += `, Room ${roomNo}`;
+    locationHtml = locationLabel;
+  }
+
+  // Build Join button for virtual meetings
+  const joinButton =
+    type === "virtual" && meetingLink
+      ? `
+        <div style="margin-top: 20px;">
+          <a href="${meetingLink}" style="display: inline-block; background-color: #DD1D25; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;">
+            Join meeting
+          </a>
+        </div>
+      `
+      : "";
+
+  // Generate .ics file content
+  const icsResult = createEvent({
+    title: title,
+    description: `Topic: ${topic}`,
+    start: [year, month, day, hours, minutes],
+    duration: { hours: 1, minutes: 0 },
+    location:
+      type === "virtual" ? meetingLink || "" : locationLabel || location,
+    url: type === "virtual" ? meetingLink : undefined,
+    organizer: {
+      name: "Sports Club",
+      email: process.env.EMAIL_USER_OFFICIAL || "",
+    },
+    attendees: params.allParticipants.map((email) => ({
+      name: email,
+      email: email,
+    })),
+  });
+
+  if (icsResult.error) {
+    console.error("[ICS] Failed to generate .ics file:", icsResult.error);
+  }
+
+  const icsContent = icsResult.value || "";
+
+  const mailOptions = {
+    from: `"Sports Club" <${process.env.EMAIL_USER_OFFICIAL}>`,
+    to: to,
+    subject: title,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #333;">
+        <!-- Card container -->
+        <div style="max-width: 480px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 10px; padding: 32px; background: #fff;">
+
+          <!-- Greeting -->
+          <p style="font-size: 15px; line-height: 1.6; color: #111; margin: 0 0 24px 0;">
+            Hi <strong>${recipientName}</strong>, you have a new meeting to discuss about <strong>${topic}</strong>.
+          </p>
+
+          <!-- Details table -->
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr style="border-top: 1px solid #f0f0f0;">
+              <td style="padding: 12px 0; color: #888; width: 100px; vertical-align: top;">Host</td>
+              <td style="padding: 12px 0; color: #111; font-weight: 600;">Sports Club</td>
+            </tr>
+            <tr style="border-top: 1px solid #f0f0f0;">
+              <td style="padding: 12px 0; color: #888; vertical-align: top;">Date</td>
+              <td style="padding: 12px 0; color: #111; font-weight: 600;">${formattedDate}</td>
+            </tr>
+            <tr style="border-top: 1px solid #f0f0f0;">
+              <td style="padding: 12px 0; color: #888; vertical-align: top;">Time</td>
+              <td style="padding: 12px 0; color: #111; font-weight: 600;">${formattedTime}</td>
+            </tr>
+            <tr style="border-top: 1px solid #f0f0f0;">
+              <td style="padding: 12px 0; color: #888; vertical-align: top;">Location</td>
+              <td style="padding: 12px 0; font-weight: 600;">${locationHtml}</td>
+            </tr>
+          </table>
+
+          ${joinButton}
+
+        </div>
+
+        <!-- Footer -->
+        <p style="text-align: center; font-size: 12px; color: #aaa; margin-top: 24px;">
+          <a href="${process.env.CLIENT_URL || "#"}" style="color: #DD1D25; text-decoration: none; font-weight: 500;">Sports Club</a> | All rights reserved ${year}
+        </p>
+      </div>
+    `,
+    attachments: icsContent
+      ? [
+          {
+            filename: "invite.ics",
+            content: icsContent,
+            contentType: "text/calendar; method=REQUEST",
+          },
+        ]
+      : [],
+  };
+
+  try {
+    await getOfficialTransporter().sendMail(mailOptions);
+    console.log(`[Email] Meeting invitation sent to ${to}`);
+  } catch (error) {
+    console.error("[Email] Failed to send meeting invitation:", error);
   }
 };
 

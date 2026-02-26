@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getUsers,
+  searchUsers,
   getUserById,
   createUser,
   updateUser,
@@ -13,6 +14,9 @@ import { UserRole } from "../models/User.js";
 const router = express.Router();
 
 router.use(protect); // All routes protected
+
+// Search users by name/email: all authenticated
+router.get("/search", searchUsers);
 
 // Get all users: Admin, Superuser, Moderator (filtered)
 router.get(

@@ -20,8 +20,6 @@ export interface SportData {
   stats: Stat[];
   section1: SportsSection;
   section2: SportsSection;
-  section3: SportsSection;
-  section4: SportsSection;
   detailsSection: {
     title: string;
     description: string;
@@ -64,14 +62,6 @@ export const sportsData: SportData = {
   section2: {
     title: "Power. Precision. Pride.",
     subtitle: "Representing Sunway College Kathmandu on the field.",
-  },
-  section3: {
-    title: "Test your best career outcome.",
-    subtitle: "Could be your next step if you dont know how to code.",
-  },
-  section4: {
-    title: "Join the Legacy.",
-    subtitle: "Your journey to greatness starts here at SSRC.",
   },
   detailsSection: {
     title: "About SSRC Sports Club",

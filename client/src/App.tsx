@@ -6,7 +6,6 @@ import ErrorPage from "./components/ui/ErrorPage";
 import { store } from "./store/store";
 import { Provider } from "react-redux";
 import RootComp from "./components/auth_client/root/RootComp";
-import Events from "./components/auth_client/pages/Events";
 import RequestEquipments from "./components/auth_client/pages/RequestEquipments";
 import Team from "./components/auth_client/pages/Team";
 import Profile from "./components/auth_client/pages/Profile";
@@ -25,6 +24,7 @@ import Inventory from "./components/auth_client/pages/Inventory";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import FeedbackList from "./components/auth_client/pages/FeedbackList";
+import MeetingManagement from "./components/auth_client/pages/MeetingManagement";
 import { Toaster } from "react-hot-toast";
 
 const router = createBrowserRouter([
@@ -42,10 +42,6 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <Announcements />,
-          },
-          {
-            path: "events",
-            element: <Events />,
           },
           {
             path: "events/:id",
@@ -110,6 +106,10 @@ const router = createBrowserRouter([
           {
             path: "user-feedback",
             element: <FeedbackList />,
+          },
+          {
+            path: "meetings",
+            element: <MeetingManagement />,
           },
         ],
       },

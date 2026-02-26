@@ -248,3 +248,34 @@ export interface FormSubmission {
   submittedAt: string;
   reviewedAt?: string;
 }
+
+// Meeting Types
+export type MeetingType = "virtual" | "physical";
+
+export interface Meeting {
+  _id: string;
+  title: string;
+  topic: string;
+  type: MeetingType;
+  venue?: string;
+  roomNo?: string;
+  meetingLink?: string;
+  date: string;
+  time: string;
+  participants: string[];
+  createdBy: User | string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingCreate {
+  title: string;
+  topic: string;
+  type: MeetingType;
+  venue?: string;
+  roomNo?: string;
+  meetingLink?: string;
+  date: string;
+  time: string;
+  participants: string[];
+}

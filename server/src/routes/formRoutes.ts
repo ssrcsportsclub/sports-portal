@@ -75,7 +75,7 @@ router.get(
 router.patch(
   "/submissions/:id/status",
   protect,
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN),
   updateSubmissionStatus,
 );
 

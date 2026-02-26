@@ -27,6 +27,29 @@ export const getUsers = async (req: Request, res: Response) => {
   }
 };
 
+// @desc    Search users by name or email
+// @route   GET /api/users/search?q=query
+// @access  Private (all authenticated)
+export const searchUsers = async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+    if (!q || typeof q !== "string" || q.trim().length < 2) {
+      return res.json([]);
+    }
+
+    const regex = new RegExp(q.trim(), "i");
+    const users = await User.find({
+      $or: [{ name: regex }, { email: regex }],
+    })
+      .select("name email role")
+      .limit(10);
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: (error as Error).message });
+  }
+};
+
 // @desc    Create a new user manually
 // @route   POST /api/users
 // @access  Private/Admin

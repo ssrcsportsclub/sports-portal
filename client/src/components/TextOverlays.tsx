@@ -5,7 +5,7 @@ interface OverlaySectionProps {
   section: SportsSection;
   progress: MotionValue<number>;
   range: [number, number];
-  position: "center" | "left" | "right";
+  position: "center" | "left";
   highlightWord?: string;
 }
 
@@ -87,24 +87,6 @@ export default function TextOverlays({
         range={[0.25, 0.45]}
         position="left"
         highlightWord="Power"
-      />
-
-      {/* Section 3: Right */}
-      <OverlaySection
-        section={sportsData.section3}
-        progress={scrollYProgress}
-        range={[0.5, 0.7]}
-        position="right"
-        highlightWord="Best"
-      />
-
-      {/* Section 4: Left */}
-      <OverlaySection
-        section={sportsData.section4}
-        progress={scrollYProgress}
-        range={[0.75, 0.95]}
-        position="left"
-        highlightWord="Legacy"
       />
     </div>
   );
