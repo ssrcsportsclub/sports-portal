@@ -1,8 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Modal from "../../ui/Modal";
 import api from "../../../services/api";
 import DrawTeamsModal from "./DrawTeamsModal";
 import LoadingSpinner from "../../ui/LoadingSpinner";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
+import { TeamsPdfTemplate } from "./DrawPdfTemplate";
+import { toast } from "react-hot-toast";
 
 interface TeamMember {
   _id?: string;
@@ -36,6 +40,202 @@ const AllTeams = () => {
   const [preSelectedEventId, setPreSelectedEventId] = useState<string>("");
   const [events, setEvents] = useState<any[]>([]);
   const [draws, setDraws] = useState<any[]>([]);
+
+  // PDF Export State
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [exportData, setExportData] = useState<{
+    sport: string;
+    teams: Team[];
+  } | null>(null);
+  const exportContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadTeamsPDF = async (
+    sportName: string,
+    sportTeams: Team[],
+  ) => {
+    setExportData({ sport: sportName, teams: sportTeams });
+    setIsDownloading(true);
+
+    // Wait for the DOM to update with the export data
+    setTimeout(async () => {
+      if (!exportContainerRef.current) {
+        setIsDownloading(false);
+        return;
+      }
+
+      try {
+        const container = exportContainerRef.current;
+        const originalStyle = container.style.cssText;
+        container.style.height = "auto";
+        container.style.overflow = "visible";
+
+        container.style.position = "relative";
+        const containerTop = container.getBoundingClientRect().top;
+        const containerScrollWidth = container.scrollWidth;
+
+        // Collect high-level section bounds so we can avoid splitting them across pages
+        const sectionRectsDom = Array.from(
+          container.querySelectorAll("[data-pdf-section]"),
+        ).map((el) => {
+          const rect = el.getBoundingClientRect();
+          return {
+            top: rect.top - containerTop,
+            bottom: rect.bottom - containerTop,
+          };
+        });
+
+        const canvas = await html2canvas(container, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          windowWidth: containerScrollWidth,
+          onclone: (documentClone) => {
+            // html2canvas crashes resolving OKLCH and OKLAB colors, which might be added by Tailwind v4.
+            // We manually find elements in the clone with OKLCH/OKLAB variables and replace them.
+            const elements = documentClone.getElementsByTagName("*");
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i] as HTMLElement;
+              const style = window.getComputedStyle(el);
+              const propsToCheck = [
+                "color",
+                "backgroundColor",
+                "borderColor",
+                "boxShadow",
+                "backgroundImage",
+              ];
+
+              for (const prop of propsToCheck) {
+                const val = style.getPropertyValue(
+                  prop.replace(/([A-Z])/g, "-$1").toLowerCase(),
+                );
+                if (val && (val.includes("oklch") || val.includes("oklab"))) {
+                  el.style.setProperty(
+                    prop.replace(/([A-Z])/g, "-$1").toLowerCase(),
+                    "transparent",
+                    "important",
+                  );
+                }
+              }
+              if (
+                el.style.cssText.includes("oklch") ||
+                el.style.cssText.includes("oklab")
+              ) {
+                el.style.cssText = el.style.cssText
+                  .replace(/oklch\([^)]+\)/g, "rgba(0,0,0,0.1)")
+                  .replace(/oklab\([^)]+\)/g, "rgba(0,0,0,0.1)");
+              }
+            }
+          },
+        });
+
+        container.style.cssText = originalStyle;
+
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? "l" : "p",
+          unit: "pt",
+          format: "a4",
+        });
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const pageMargin = 24;
+        const usableWidth = pdfWidth - pageMargin * 2;
+        const usableHeight = pdfHeight - pageMargin * 2;
+
+        const widthScale = usableWidth / canvas.width;
+        const imgWidth = usableWidth;
+        const imgHeight = canvas.height * widthScale;
+        const imgData = canvas.toDataURL("image/jpeg", 1.0);
+
+        const domToCanvasScale = canvas.width / containerScrollWidth;
+        const domToPdfScale = domToCanvasScale * widthScale;
+        const sectionRectsPdf = sectionRectsDom.map(({ top, bottom }) => ({
+          top: top * domToPdfScale,
+          bottom: bottom * domToPdfScale,
+        }));
+
+        const pageStarts: number[] = [0];
+        let currentStart = 0;
+        const minGap = 12;
+
+        while (currentStart + usableHeight < imgHeight) {
+          const nominalBreak = currentStart + usableHeight;
+          const overflowingSection = sectionRectsPdf.find(
+            ({ top, bottom }) =>
+              top < nominalBreak &&
+              bottom > nominalBreak &&
+              bottom - top <= usableHeight,
+          );
+
+          let smartBreak = nominalBreak;
+          if (overflowingSection) {
+            smartBreak = overflowingSection.top;
+          }
+
+          if (smartBreak <= currentStart + minGap) {
+            smartBreak = nominalBreak;
+          }
+
+          pageStarts.push(smartBreak);
+          currentStart = smartBreak;
+        }
+
+        pdf.addImage(
+          imgData,
+          "JPEG",
+          pageMargin,
+          pageMargin,
+          imgWidth,
+          imgHeight,
+        );
+
+        if (pageStarts.length > 1) {
+          pdf.setFillColor(255, 255, 255);
+          pdf.rect(
+            0,
+            pageMargin + pageStarts[1],
+            pdfWidth,
+            pdfHeight - (pageMargin + pageStarts[1]),
+            "F",
+          );
+        }
+
+        for (let i = 1; i < pageStarts.length; i++) {
+          pdf.addPage();
+          pdf.addImage(
+            imgData,
+            "JPEG",
+            pageMargin,
+            pageMargin - pageStarts[i],
+            imgWidth,
+            imgHeight,
+          );
+          const nextBreakIndex = i + 1;
+          if (nextBreakIndex < pageStarts.length) {
+            const visibleHeight = pageStarts[nextBreakIndex] - pageStarts[i];
+            pdf.setFillColor(255, 255, 255);
+            pdf.rect(
+              0,
+              pageMargin + visibleHeight,
+              pdfWidth,
+              pdfHeight - (pageMargin + visibleHeight),
+              "F",
+            );
+          }
+        }
+
+        pdf.save(`${sportName.replace(/\s+/g, "_")}_Teams.pdf`);
+        toast.success("Teams exported successfully!");
+      } catch (error) {
+        console.error("Error generating PDF:", error);
+        toast.error("Failed to generate PDF");
+      } finally {
+        setIsDownloading(false);
+        setExportData(null);
+      }
+    }, 100);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -183,6 +383,29 @@ const AllTeams = () => {
                     </button>
                   );
                 })()}
+
+                <button
+                  onClick={() => handleDownloadTeamsPDF(sport, sportTeams)}
+                  disabled={isDownloading}
+                  className="px-3 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[10px] font-bold uppercase tracking-wider rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all transform active:scale-95 shadow-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-3 h-3"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"
+                      clipRule="evenodd"
+                    />
+                    <path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" />
+                  </svg>
+                  {isDownloading && exportData?.sport === sport
+                    ? "Exporting..."
+                    : "Export PDF"}
+                </button>
               </div>
             </div>
 
@@ -256,6 +479,28 @@ const AllTeams = () => {
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                   Event Ended
                 </span>
+                <button
+                  onClick={() => handleDownloadTeamsPDF(sport, sportTeams)}
+                  disabled={isDownloading}
+                  className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-bold uppercase tracking-wider rounded-md hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all transform active:scale-95 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-3 h-3"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H8.25z"
+                      clipRule="evenodd"
+                    />
+                    <path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" />
+                  </svg>
+                  {isDownloading && exportData?.sport === sport
+                    ? "Exporting..."
+                    : "Export PDF"}
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-75 grayscale hover:grayscale-0 transition-all">
@@ -386,6 +631,18 @@ const AllTeams = () => {
         initialSport={preSelectedSport}
         initialEventId={preSelectedEventId}
       />
+
+      {/* Hidden Export Template */}
+      <div className="fixed top-0 left-0 -translate-x-full -z-50 pointer-events-none opacity-0">
+        <div ref={exportContainerRef}>
+          {exportData && (
+            <TeamsPdfTemplate
+              sport={exportData.sport}
+              teams={exportData.teams}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

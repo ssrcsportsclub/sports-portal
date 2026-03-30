@@ -9,6 +9,7 @@ import html2canvas from "html2canvas";
 import { DrawPdfTemplate } from "./DrawPdfTemplate";
 import "react-datepicker/dist/react-datepicker.css";
 import "../../../styles/datepicker-custom.css"; // We'll create this for custom dark mode styles
+import { toast } from "react-hot-toast";
 
 interface Event {
   _id: string;
@@ -139,6 +140,101 @@ const EventDetails = () => {
   const isAdmin = user?.role === "admin";
   const hasStarted = event && new Date() >= new Date(event.date);
 
+  const [isGeneratingPlayoffs, setIsGeneratingPlayoffs] = useState(false);
+
+  const handleGeneratePlayoffs = async (draw: any) => {
+    if (!isAdmin) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to generate playoffs for this group stage? This will create a new knockout draw with the top 2 teams from each group.",
+      )
+    )
+      return;
+
+    setIsGeneratingPlayoffs(true);
+    try {
+      const topTeams: string[] = [];
+      const groupings = draw.groupings || [];
+
+      const groupMatchId = (gName: string, t1: any, t2: any) => {
+        const ids = [t1._id, t2._id].sort();
+        return `group_${gName}_${ids[0]}_${ids[1]}`;
+      };
+
+      groupings.forEach((group: any) => {
+        const groupTeams = group.teams;
+        const standings = groupTeams
+          .map((team: any) => {
+            let W = 0,
+              Pts = 0,
+              SF = 0,
+              SA = 0;
+            groupTeams.forEach((opp: any) => {
+              if (opp._id === team._id) return;
+              const mid = groupMatchId(group.name, team, opp);
+              const result = draw.matchResults?.[mid];
+              const score = draw.matchScores?.[mid];
+              if (score && result) {
+                const parts = score.split(/\s*-\s*/).map(Number);
+                if (
+                  parts.length === 2 &&
+                  !isNaN(parts[0]) &&
+                  !isNaN(parts[1])
+                ) {
+                  const high = Math.max(parts[0], parts[1]);
+                  const low = Math.min(parts[0], parts[1]);
+                  if (result === team._id) {
+                    SF += high;
+                    SA += low;
+                  } else {
+                    SF += low;
+                    SA += high;
+                  }
+                }
+              }
+              if (result === team._id) {
+                W++;
+                Pts++;
+              }
+            });
+            return { team, Pts, W, Diff: SF - SA };
+          })
+          .sort((a: any, b: any) =>
+            b.Pts !== a.Pts ? b.Pts - a.Pts : b.Diff - a.Diff,
+          );
+
+        if (standings.length > 0) topTeams.push(standings[0].team._id);
+        if (standings.length > 1) topTeams.push(standings[1].team._id);
+      });
+
+      if (topTeams.length < 2) {
+        toast.error("Not enough teams to form playoffs.");
+        return;
+      }
+
+      await api.post(`/draws`, {
+        event: event!._id,
+        format: "Knockout",
+        title: "Playoffs",
+        sport: draw.sport,
+        teamSize: draw.teamSize,
+        drawnTeams: topTeams,
+      });
+
+      toast.success("Playoffs generated successfully!");
+      // Reload event to fetch new draws
+      const response = await api.get(`/events/${id}`);
+      setEvent(response.data.event);
+      setDraws(response.data.draws);
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Failed to generate playoffs",
+      );
+    } finally {
+      setIsGeneratingPlayoffs(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!drawContainerRef.current) return;
     setIsDownloading(true);
@@ -151,14 +247,24 @@ const EventDetails = () => {
       container.style.height = "auto";
       container.style.overflow = "visible";
 
-      // Collect row bottom positions (in DOM/CSS pixels, relative to container top)
-      // before html2canvas captures the content, so we can compute smart page breaks.
       const containerTop = container.getBoundingClientRect().top;
       const containerScrollWidth = container.scrollWidth;
+      // Collect row bottom positions (in DOM/CSS pixels, relative to container top)
+      // before html2canvas captures the content, so we can compute smart page breaks.
       const rows = container.querySelectorAll("tr");
       const rowBottomsDom = Array.from(rows).map(
         (row) => row.getBoundingClientRect().bottom - containerTop,
       );
+      // Collect high-level section bounds so we can avoid splitting them across pages
+      const sectionRectsDom = Array.from(
+        container.querySelectorAll("[data-pdf-section]"),
+      ).map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          top: rect.top - containerTop,
+          bottom: rect.bottom - containerTop,
+        };
+      });
 
       // html2canvas config
       const canvas = await html2canvas(container, {
@@ -224,10 +330,13 @@ const EventDetails = () => {
 
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
+      const pageMargin = 24;
+      const usableWidth = pdfWidth - pageMargin * 2;
+      const usableHeight = pdfHeight - pageMargin * 2;
 
       // Scale to fit width primarily
-      const widthScale = pdfWidth / canvas.width;
-      const imgWidth = pdfWidth;
+      const widthScale = usableWidth / canvas.width;
+      const imgWidth = usableWidth;
       const imgHeight = canvas.height * widthScale;
 
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
@@ -237,39 +346,97 @@ const EventDetails = () => {
       // DOM CSS px → canvas px: multiply by (canvas.width / containerScrollWidth)
       // Canvas px → PDF pt:     multiply by widthScale
       const domToCanvasScale = canvas.width / containerScrollWidth;
-      const rowBottomsPdf = rowBottomsDom.map(
-        (y) => y * domToCanvasScale * widthScale,
-      );
+      const domToPdfScale = domToCanvasScale * widthScale;
+      const rowBottomsPdf = rowBottomsDom.map((y) => y * domToPdfScale);
+      const sectionRectsPdf = sectionRectsDom.map(({ top, bottom }) => ({
+        top: top * domToPdfScale,
+        bottom: bottom * domToPdfScale,
+      }));
 
       // Build a list of page-start positions using smart (row-aware) breaks.
       const pageStarts: number[] = [0];
       let currentStart = 0;
-      while (currentStart + pdfHeight < imgHeight) {
-        const nominalBreak = currentStart + pdfHeight;
-        // Find the bottom of the last row that fits entirely on this page.
+      const minGap = 12;
+      while (currentStart + usableHeight < imgHeight) {
+        const nominalBreak = currentStart + usableHeight;
+
+        // If a section would be split and it fits on a single page, push it to the next page.
+        const overflowingSection = sectionRectsPdf.find(
+          ({ top, bottom }) =>
+            top < nominalBreak &&
+            bottom > nominalBreak &&
+            bottom - top <= usableHeight,
+        );
+
         let smartBreak = nominalBreak;
-        for (let i = rowBottomsPdf.length - 1; i >= 0; i--) {
-          if (rowBottomsPdf[i] <= nominalBreak && rowBottomsPdf[i] > currentStart) {
-            smartBreak = rowBottomsPdf[i];
-            break;
+        if (overflowingSection) {
+          smartBreak = overflowingSection.top;
+        } else {
+          // Otherwise, try to break on the last full row that fits.
+          const rowsBeforeBreak = rowBottomsPdf.filter(
+            (y) => y > currentStart + minGap && y <= nominalBreak,
+          );
+          if (rowsBeforeBreak.length) {
+            smartBreak = rowsBeforeBreak[rowsBeforeBreak.length - 1];
           }
         }
-        // Safety: ensure forward progress even when no suitable row boundary exists
-        // (e.g. a row taller than a full page, or no rows at all).
-        if (smartBreak <= currentStart) {
+
+        // Safety: ensure forward progress even when no suitable boundary exists
+        if (smartBreak <= currentStart + minGap) {
           smartBreak = nominalBreak;
         }
+
         pageStarts.push(smartBreak);
         currentStart = smartBreak;
       }
 
       // Add first page
-      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(
+        imgData,
+        "JPEG",
+        pageMargin,
+        pageMargin,
+        imgWidth,
+        imgHeight,
+      );
+
+      // Mask out the bottom of the first page if there's a break
+      if (pageStarts.length > 1) {
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(
+          0,
+          pageMargin + pageStarts[1],
+          pdfWidth,
+          pdfHeight - (pageMargin + pageStarts[1]),
+          "F",
+        );
+      }
 
       // Add remaining pages, offsetting the image so the correct slice is visible
       for (let i = 1; i < pageStarts.length; i++) {
         pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, -pageStarts[i], imgWidth, imgHeight);
+        pdf.addImage(
+          imgData,
+          "JPEG",
+          pageMargin,
+          pageMargin - pageStarts[i],
+          imgWidth,
+          imgHeight,
+        );
+
+        // Mask out the bottom of this page if there's another break
+        const nextBreakIndex = i + 1;
+        if (nextBreakIndex < pageStarts.length) {
+          const visibleHeight = pageStarts[nextBreakIndex] - pageStarts[i];
+          pdf.setFillColor(255, 255, 255);
+          pdf.rect(
+            0,
+            pageMargin + visibleHeight,
+            pdfWidth,
+            pdfHeight - (pageMargin + visibleHeight),
+            "F",
+          );
+        }
       }
 
       pdf.save(`${event?.title?.replace(/\s+/g, "_") || "Event"}_Draws.pdf`);
@@ -859,11 +1026,34 @@ const EventDetails = () => {
                               let P = 0,
                                 W = 0,
                                 L = 0,
-                                Pts = 0;
+                                Pts = 0,
+                                SF = 0,
+                                SA = 0;
                               groupTeams.forEach((opp) => {
                                 if (opp._id === team._id) return;
                                 const mid = groupMatchId(gName, team, opp);
                                 const result = draw.matchResults?.[mid];
+                                const score = draw.matchScores?.[mid];
+                                if (score && result) {
+                                  const parts = score
+                                    .split(/\s*-\s*/)
+                                    .map(Number);
+                                  if (
+                                    parts.length === 2 &&
+                                    !isNaN(parts[0]) &&
+                                    !isNaN(parts[1])
+                                  ) {
+                                    const high = Math.max(parts[0], parts[1]);
+                                    const low = Math.min(parts[0], parts[1]);
+                                    if (result === team._id) {
+                                      SF += high;
+                                      SA += low;
+                                    } else {
+                                      SF += low;
+                                      SA += high;
+                                    }
+                                  }
+                                }
                                 if (!result) return;
                                 P++;
                                 if (result === team._id) {
@@ -871,10 +1061,10 @@ const EventDetails = () => {
                                   Pts += 1;
                                 } else L++;
                               });
-                              return { team, P, W, L, Pts };
+                              return { team, P, W, L, Pts, Diff: SF - SA };
                             })
                             .sort((a, b) =>
-                              b.Pts !== a.Pts ? b.Pts - a.Pts : b.W - a.W,
+                              b.Pts !== a.Pts ? b.Pts - a.Pts : b.Diff - a.Diff,
                             );
 
                         return storedGroupings.map((group) => {
@@ -916,14 +1106,16 @@ const EventDetails = () => {
                                           <th className="pb-2 font-bold text-zinc-500 text-left pr-3 w-full">
                                             Team
                                           </th>
-                                          {["P", "W", "L", "Pts"].map((h) => (
-                                            <th
-                                              key={h}
-                                              className="pb-2 font-bold text-zinc-400 text-center px-1.5"
-                                            >
-                                              {h}
-                                            </th>
-                                          ))}
+                                          {["P", "W", "L", "Diff", "Pts"].map(
+                                            (h) => (
+                                              <th
+                                                key={h}
+                                                className="pb-2 font-bold text-zinc-400 text-center px-1.5"
+                                              >
+                                                {h}
+                                              </th>
+                                            ),
+                                          )}
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -952,6 +1144,19 @@ const EventDetails = () => {
                                             </td>
                                             <td className="py-2 text-center px-1.5 text-red-500">
                                               {row.L}
+                                            </td>
+                                            <td
+                                              className={`py-2 text-center px-1.5 font-bold ${
+                                                row.Diff > 0
+                                                  ? "text-green-600 dark:text-green-400"
+                                                  : row.Diff < 0
+                                                    ? "text-red-600 dark:text-red-400"
+                                                    : "text-zinc-500 dark:text-zinc-400"
+                                              }`}
+                                            >
+                                              {row.Diff > 0
+                                                ? `+${row.Diff}`
+                                                : row.Diff}
                                             </td>
                                             <td className="py-2 text-center px-1.5 font-black text-zinc-900 dark:text-zinc-50">
                                               {row.Pts}
@@ -1035,6 +1240,28 @@ const EventDetails = () => {
                           );
                         });
                       })()}
+                      {/* Generate Playoffs Button */}
+                      {isAdmin && (
+                        <div className="mt-8 flex justify-end">
+                          <button
+                            onClick={() => handleGeneratePlayoffs(draw)}
+                            disabled={isGeneratingPlayoffs}
+                            className="px-6 py-2.5 bg-[#DD1D25] text-white rounded-xl font-bold text-sm tracking-wide hover:bg-[#b0171d] shadow hover:shadow-lg hover:-translate-y-0.5 transition-all outline-none focus:ring-2 focus:ring-[#DD1D25]/50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isGeneratingPlayoffs ? (
+                              <span className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+                                Generating...
+                              </span>
+                            ) : (
+                              <>
+                                <span>🏆</span>
+                                Generate Playoffs
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

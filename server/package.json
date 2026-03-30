@@ -1,6 +1,6 @@
 {
   "name": "sports-club-server",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Backend for Sports Club Portal",
   "main": "dist/index.js",
   "type": "module",
