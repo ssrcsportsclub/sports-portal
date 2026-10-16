@@ -17,7 +17,8 @@ import { errorHandler } from "./middlewares/errorMiddleware.js";
 
 // Middleware
 // gzip responses: JSON lists (teams, draws, members) shrink by ~70–80%.
-app.use(compression());
+// Vercel already compresses at its edge, so skip the extra CPU work there.
+if (!process.env.VERCEL) app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
 app.set("trust proxy", 1); // Trust first proxy (e.g. Vercel, Heroku, Nginx)
@@ -100,3 +101,6 @@ connectDB().then(() => {
     console.log(`Server running on port ${PORT}`);
   });
 });
+
+// Vercel's Express runtime can use the exported app directly.
+export default app;
