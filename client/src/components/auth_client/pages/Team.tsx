@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import Modal from "../../ui/Modal";
-import api from "../../../services/api";
 import { useAppSelector } from "../../../store/hooks";
 import { Link } from "react-router-dom";
-import LoadingSpinner from "../../ui/LoadingSpinner";
+import { useGetMyTeamsQuery } from "../../../store/api";
+import { CardGridSkeleton } from "../../ui/Skeleton";
 
 const Team = () => {
   interface TeamMember {
@@ -17,60 +17,33 @@ const Team = () => {
   }
 
   const { user } = useAppSelector((state) => state.auth);
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const { data: teams, isLoading: loading, isError } = useGetMyTeamsQuery();
+  const error = isError ? "Failed to fetch teams" : null;
 
-  useEffect(() => {
-    const fetchMyTeams = async () => {
-      try {
-        const { data } = await api.get("/teams/my");
-        const allMembers: TeamMember[] = [];
+  const members = useMemo(() => {
+    const now = new Date();
+    const all: TeamMember[] = [];
+    (teams ?? []).forEach((team) => {
+      // Only teams whose event still exists and hasn't ended
+      const event = team.event;
+      if (!event) return;
+      if (new Date(event.endDate || event.date) < now) return;
 
-        // Handle array of teams (backend update)
-        const teams = Array.isArray(data) ? data : [data];
-
-        const now = new Date();
-        teams.forEach((team: any) => {
-          // Filter out teams if the event doesn't exist or has ended
-          if (!team.event) return;
-
-          const event = team.event;
-          const eventEndDate = event.endDate || event.date;
-          if (new Date(eventEndDate) < now) return;
-
-          // Add members
-          if (team.members && Array.isArray(team.members)) {
-            team.members.forEach((member: any, index: number) => {
-              allMembers.push({
-                id: member._id || member.email,
-                name: member.name,
-                role: index === 0 ? "Team Captain" : "Member",
-                sport: team.sport,
-                status: index === 0 ? "Online" : "Away",
-                email: member.email,
-                phone: member.phone || "N/A",
-              });
-            });
-          }
+      team.members?.forEach((member, index) => {
+        all.push({
+          id: member._id || member.email,
+          name: member.name,
+          role: index === 0 ? "Team Captain" : "Member",
+          sport: team.sport,
+          status: index === 0 ? "Online" : "Away",
+          email: member.email,
+          phone: member.phone || "N/A",
         });
-        setMembers(allMembers);
-      } catch (err: any) {
-        console.error("Error fetching teams:", err);
-        // If 404, it might just mean no team found, which is fine
-        if (err.response?.status === 404) {
-          setMembers([]);
-        } else {
-          setError(err.message || "Failed to fetch teams");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMyTeams();
-  }, []);
+      });
+    });
+    return all;
+  }, [teams]);
 
   // Group members by sport
   const membersBySport = members.reduce(
@@ -87,7 +60,7 @@ const Team = () => {
   return (
     <div className="p-6 space-y-8">
       {loading ? (
-        <LoadingSpinner />
+        <CardGridSkeleton label="Loading your team" />
       ) : error ? (
         <div className="text-red-500 text-center">{error}</div>
       ) : Object.keys(membersBySport).length === 0 ? (

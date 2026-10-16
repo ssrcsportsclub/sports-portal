@@ -6,6 +6,7 @@ import {
 } from "../../../store/slices/formSlice";
 import type { SubmissionStatus } from "../../../types";
 import Modal from "../../ui/Modal";
+import { TableSkeleton } from "../../ui/Skeleton";
 
 // Icons
 const CheckIcon = ({ className }: { className?: string }) => (
@@ -188,11 +189,7 @@ export const FormSubmissions: React.FC<FormSubmissionsProps> = ({ formId }) => {
   };
 
   if (loading && submissions.length === 0) {
-    return (
-      <div className="flex justify-center p-8">
-        <div className="w-6 h-6 border-2 border-[#DD1D25] border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <TableSkeleton rows={6} label="Loading submissions" />;
   }
 
   return (

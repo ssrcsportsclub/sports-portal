@@ -1,31 +1,60 @@
+import { lazy, Suspense, useEffect } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import LoginForm from "./components/no_auth/Login";
-import DynamicForm from "./components/no_auth/open_forms/DynamicForm";
-import Home from "./pages/Home";
-import ErrorPage from "./components/ui/ErrorPage";
-import { store } from "./store/store";
 import { Provider } from "react-redux";
-import RootComp from "./components/auth_client/root/RootComp";
-import RequestEquipments from "./components/auth_client/pages/RequestEquipments";
-import Team from "./components/auth_client/pages/Team";
-import Profile from "./components/auth_client/pages/Profile";
-import ReportBug from "./components/auth_client/pages/ReportBug";
-import Feedback from "./components/auth_client/pages/Feedback";
-import Settings from "./components/auth_client/pages/Settings";
-import Forms from "./pages/Forms";
-import MyEvents from "./components/auth_client/pages/MyEvents";
-import AllEvents from "./components/auth_client/pages/AllEvents";
-import EventDetails from "./components/auth_client/pages/EventDetails";
-import AllTeams from "./components/auth_client/pages/AllTeams";
-import Members from "./components/auth_client/pages/Members";
-import MemberRegistrations from "./components/auth_client/pages/MemberRegistrations";
-import Announcements from "./components/auth_client/pages/Announcements";
-import Inventory from "./components/auth_client/pages/Inventory";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import LandingPage from "./pages/LandingPage";
-import FeedbackList from "./components/auth_client/pages/FeedbackList";
-import MeetingManagement from "./components/auth_client/pages/MeetingManagement";
 import { Toaster } from "react-hot-toast";
+import { store } from "./store/store";
+import { useAppDispatch } from "./store/hooks";
+import { fetchProfile } from "./store/slices/authSlice";
+import ErrorPage from "./components/ui/ErrorPage";
+import {
+  DashboardShellSkeleton,
+  PublicPageSkeleton,
+} from "./components/ui/Skeleton";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+
+// Every page is its own chunk so visitors only download what they open.
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const Home = lazy(() => import("./pages/Home"));
+const Forms = lazy(() => import("./pages/Forms"));
+const LoginForm = lazy(() => import("./components/no_auth/Login"));
+const DynamicForm = lazy(
+  () => import("./components/no_auth/open_forms/DynamicForm"),
+);
+const RootComp = lazy(() => import("./components/auth_client/root/RootComp"));
+const RequestEquipments = lazy(
+  () => import("./components/auth_client/pages/RequestEquipments"),
+);
+const Team = lazy(() => import("./components/auth_client/pages/Team"));
+const Profile = lazy(() => import("./components/auth_client/pages/Profile"));
+const ReportBug = lazy(
+  () => import("./components/auth_client/pages/ReportBug"),
+);
+const Feedback = lazy(() => import("./components/auth_client/pages/Feedback"));
+const Settings = lazy(() => import("./components/auth_client/pages/Settings"));
+const MyEvents = lazy(() => import("./components/auth_client/pages/MyEvents"));
+const AllEvents = lazy(
+  () => import("./components/auth_client/pages/AllEvents"),
+);
+const EventDetails = lazy(
+  () => import("./components/auth_client/pages/EventDetails"),
+);
+const AllTeams = lazy(() => import("./components/auth_client/pages/AllTeams"));
+const Members = lazy(() => import("./components/auth_client/pages/Members"));
+const MemberRegistrations = lazy(
+  () => import("./components/auth_client/pages/MemberRegistrations"),
+);
+const Announcements = lazy(
+  () => import("./components/auth_client/pages/Announcements"),
+);
+const Inventory = lazy(
+  () => import("./components/auth_client/pages/Inventory"),
+);
+const FeedbackList = lazy(
+  () => import("./components/auth_client/pages/FeedbackList"),
+);
+const MeetingManagement = lazy(
+  () => import("./components/auth_client/pages/MeetingManagement"),
+);
 
 const router = createBrowserRouter([
   {
@@ -35,7 +64,9 @@ const router = createBrowserRouter([
       {
         element: (
           <ProtectedRoute>
-            <RootComp />
+            <Suspense fallback={<DashboardShellSkeleton />}>
+              <RootComp />
+            </Suspense>
           </ProtectedRoute>
         ),
         children: [
@@ -148,10 +179,6 @@ const router = createBrowserRouter([
   },
 ]);
 
-import { useEffect } from "react";
-import { useAppDispatch } from "./store/hooks";
-import { fetchProfile } from "./store/slices/authSlice";
-
 const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
   const dispatch = useAppDispatch();
   useEffect(() => {
@@ -166,7 +193,9 @@ export default function App() {
       <Provider store={store}>
         <AuthInitializer>
           <Toaster position="top-center" />
-          <RouterProvider router={router} />
+          <Suspense fallback={<PublicPageSkeleton />}>
+            <RouterProvider router={router} />
+          </Suspense>
         </AuthInitializer>
       </Provider>
     </>

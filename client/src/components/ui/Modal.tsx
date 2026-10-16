@@ -6,28 +6,39 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  size?: "md" | "lg" | "xl";
 }
 
-const Modal = ({ isOpen, onClose, children, title }: ModalProps) => {
+const SIZES = { md: "max-w-md", lg: "max-w-2xl", xl: "max-w-4xl" };
+
+const Modal = ({
+  isOpen,
+  onClose,
+  children,
+  title,
+  size = "md",
+}: ModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  // Parents usually pass an inline onClose; read it through a ref so the
+  // listener isn't torn down and re-attached on every parent render.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onCloseRef.current();
     };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-      document.body.style.overflow = "hidden";
-    }
-
+    const previousOverflow = document.body.style.overflow;
+    document.addEventListener("keydown", handleEscape);
+    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -35,11 +46,12 @@ const Modal = ({ isOpen, onClose, children, title }: ModalProps) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
       <div
         ref={modalRef}
-        className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 transform transition-all animate-in fade-in zoom-in-95 duration-200"
+        className={`w-full ${SIZES[size]} max-h-[92dvh] flex flex-col bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 transform transition-all animate-in fade-in zoom-in-95 duration-200`}
         role="dialog"
         aria-modal="true"
+        aria-label={title}
       >
-        <div className="flex items-center justify-between p-6 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center justify-between px-6 py-4 sm:p-6 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
           <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
             {title}
           </h2>
@@ -63,7 +75,9 @@ const Modal = ({ isOpen, onClose, children, title }: ModalProps) => {
             </svg>
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

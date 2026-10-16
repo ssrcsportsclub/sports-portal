@@ -6,13 +6,29 @@ import {
   deleteDraw,
   updateDrawResults,
   updateMatchScore,
+  advanceDraw,
 } from "../controllers/drawController.js";
 import { protect, authorize } from "../middlewares/authMiddleware.js";
 import { UserRole } from "../models/User.js";
+import { validateBody } from "../middlewares/validateRequest.js";
+import { advanceDrawSchema, createDrawSchema } from "../schemas/index.js";
 
 const router = express.Router();
 
-router.post("/", protect, authorize(UserRole.ADMIN), createDraw);
+router.post(
+  "/",
+  protect,
+  authorize(UserRole.ADMIN),
+  validateBody(createDrawSchema),
+  createDraw,
+);
+router.post(
+  "/:id/advance",
+  protect,
+  authorize(UserRole.ADMIN),
+  validateBody(advanceDrawSchema),
+  advanceDraw,
+);
 router.get("/", getAllDraws);
 router.get("/event/:eventId", getDrawsByEvent);
 router.delete("/:id", protect, authorize(UserRole.ADMIN), deleteDraw);

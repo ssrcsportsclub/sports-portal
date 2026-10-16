@@ -83,6 +83,18 @@ export const equipmentService = {
   },
 
   // Get Waitlist
+  // Waitlists for several items in a single request, keyed by equipment id.
+  getWaitlists: async (
+    equipmentIds: string[],
+  ): Promise<Record<string, Responsibility[]>> => {
+    if (!equipmentIds.length) return {};
+    const response = await api.get<Record<string, Responsibility[]>>(
+      "/equipment/waitlists",
+      { params: { ids: equipmentIds.join(",") } },
+    );
+    return response.data;
+  },
+
   getWaitlist: async (equipmentId: string): Promise<Responsibility[]> => {
     const response = await api.get<Responsibility[]>(
       `/equipment/waitlist/${equipmentId}`,

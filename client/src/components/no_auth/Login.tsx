@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
@@ -14,15 +14,23 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { loading, error, isAuthenticated } = useAppSelector(
     (state) => state.auth,
   );
+  // Return to the page that required sign-in, if any.
+  const from = (
+    location.state as { from?: { pathname: string; search?: string } } | null
+  )?.from;
+  const redirectTo = from
+    ? `${from.pathname}${from.search ?? ""}`
+    : "/dashboard";
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/dashboard");
+      navigate(redirectTo, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, redirectTo]);
 
   useEffect(() => {
     // Clear error when component unmounts

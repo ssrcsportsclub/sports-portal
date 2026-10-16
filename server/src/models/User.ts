@@ -42,4 +42,7 @@ const UserSchema: Schema = new Schema(
   { timestamps: true },
 );
 
+// Members page: filter by role, newest first.
+UserSchema.index({ role: 1, createdAt: -1 });
+
 export default mongoose.model<IUser>("User", UserSchema);

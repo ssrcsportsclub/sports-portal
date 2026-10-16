@@ -106,7 +106,6 @@ const FormSchema = new Schema<IForm>(
 );
 
 // Indexes for performance
-FormSchema.index({ formId: 1 });
 FormSchema.index({ isActive: 1 });
 FormSchema.index({ createdBy: 1 });
 

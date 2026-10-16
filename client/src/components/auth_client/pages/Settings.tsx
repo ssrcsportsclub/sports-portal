@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../../../services/api";
 import toast from "react-hot-toast";
+import { HeaderSkeleton, ListSkeleton } from "../../ui/Skeleton";
 
 const Settings = () => {
   const [notifications, setNotifications] = useState(false);
@@ -30,15 +31,16 @@ const Settings = () => {
           ? "Announcements will be sent to your email!"
           : "Announcement emails disabled.",
       );
-    } catch (err) {
+    } catch {
       toast.error("Failed to update notification settings");
     }
   };
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      <div className="p-6 space-y-6">
+        <HeaderSkeleton action={false} />
+        <ListSkeleton rows={2} label="Loading settings" />
       </div>
     );
   }

@@ -29,4 +29,8 @@ const EventSchema: Schema = new Schema(
   { timestamps: true },
 );
 
+// Event lists sort by date; dashboard filters upcoming; "my events".
+EventSchema.index({ date: 1 });
+EventSchema.index({ participants: 1 });
+
 export default mongoose.model<IEvent>("Event", EventSchema);

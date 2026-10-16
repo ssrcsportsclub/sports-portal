@@ -1,42 +1,19 @@
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import LoadingSpinner from "../../ui/LoadingSpinner";
+import { useGetEventsQuery } from "../../../store/api";
+import { EventCardsSkeleton } from "../../ui/Skeleton";
 
 const AllEvents = () => {
-  interface Event {
-    _id: string;
-    title: string;
-    description: string;
-    date: string;
-    endDate?: string;
-    location: string;
-    time?: string;
-    participants: string[];
-  }
-
   const [activeTab, setActiveTab] = useState<"upcoming" | "ongoing" | "past">(
     "upcoming",
   );
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const { data } = await api.get("/events");
-        setEvents(data);
-      } catch (err: any) {
-        console.error("Error fetching events:", err);
-        setError("Failed to load events");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, []);
+  // Cached: revisiting this page renders instantly while it revalidates.
+  const {
+    data: events = [],
+    isLoading: loading,
+    isError,
+  } = useGetEventsQuery();
+  const error = isError ? "Failed to load events" : null;
 
   const now = new Date();
 
@@ -127,7 +104,7 @@ const AllEvents = () => {
       </div>
 
       {loading ? (
-        <LoadingSpinner />
+        <EventCardsSkeleton />
       ) : error ? (
         <div className="text-center text-red-500 py-10">{error}</div>
       ) : getFilteredEvents().length === 0 ? (

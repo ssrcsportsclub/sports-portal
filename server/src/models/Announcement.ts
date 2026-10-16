@@ -41,6 +41,9 @@ const AnnouncementSchema: Schema = new Schema(
   { timestamps: true },
 );
 
+// Feed and dashboard: newest first.
+AnnouncementSchema.index({ createdAt: -1 });
+
 export default mongoose.model<IAnnouncement>(
   "Announcement",
   AnnouncementSchema,

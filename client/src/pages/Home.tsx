@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { getForms } from "../store/slices/formSlice";
 import img from "../assets/logo_main.png";
+import { EventCardsSkeleton } from "../components/ui/Skeleton";
 
 const Home = () => {
   const dispatch = useAppDispatch();
@@ -28,9 +29,7 @@ const Home = () => {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#B61C23]"></div>
-          </div>
+          <EventCardsSkeleton />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {forms.map((form: any) => (

@@ -21,8 +21,8 @@ export const getTransporter = () => {
 };
 
 export const getOfficialTransporter = () => {
-  const user = process.env.EMAIL_USER_OFFICIAL;
-  const pass = process.env.EMAIL_PASS_OFFICIAL;
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
 
   if (!user || !pass) {
     console.error(
@@ -240,9 +240,13 @@ export const sendMembershipStatusEmail = async (
 };
 
 // --- Meeting Invitation ---
+type MailRecipient = string | { email: string; name?: string };
+
 interface MeetingInvitationParams {
-  to: string;
-  recipientName: string;
+  to?: MailRecipient | MailRecipient[];
+  cc?: MailRecipient | MailRecipient[];
+  bcc?: MailRecipient | MailRecipient[];
+  recipientName?: string;
   title: string;
   topic: string;
   date: string; // ISO date string
@@ -252,8 +256,33 @@ interface MeetingInvitationParams {
   type: "virtual" | "physical";
   venue?: string;
   roomNo?: string;
-  allParticipants: string[]; // all participant emails for .ics guests
+  allParticipants: MailRecipient[]; // used for .ics guests and cc fallback
 }
+
+const normalizeRecipientObjects = (
+  list?: MailRecipient | MailRecipient[],
+): { email: string; name?: string }[] => {
+  if (!list) return [];
+  const arr = Array.isArray(list) ? list : [list];
+  const normalized = arr
+    .map((item) =>
+      typeof item === "string"
+        ? { email: item, name: undefined }
+        : { email: item.email, name: item.name },
+    )
+    .filter((item) => item.email);
+
+  const seen = new Set<string>();
+  return normalized.filter((item) => {
+    const key = item.email.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const formatRecipients = (list: { email: string; name?: string }[]) =>
+  list.map((item) => (item.name ? `${item.name} <${item.email}>` : item.email));
 
 export const sendMeetingInvitationEmail = async (
   params: MeetingInvitationParams,
@@ -261,8 +290,10 @@ export const sendMeetingInvitationEmail = async (
   const { createEvent } = await import("ics");
 
   const {
-    to,
     recipientName,
+    to: toInput,
+    cc: ccInput,
+    bcc: bccInput,
     title,
     topic,
     date,
@@ -273,6 +304,30 @@ export const sendMeetingInvitationEmail = async (
     venue,
     roomNo,
   } = params;
+
+  const clubEmail =
+    process.env.EMAIL_USER_OFFICIAL ||
+    process.env.SPORTS_CLUB_EMAIL ||
+    "sportsclub@sunway.edu.np";
+
+  const attendeeObjects = normalizeRecipientObjects(params.allParticipants);
+  const toObjects = normalizeRecipientObjects(toInput || clubEmail);
+  const ccObjects = normalizeRecipientObjects(ccInput);
+  const bccObjects = normalizeRecipientObjects(bccInput);
+
+  const toList = formatRecipients(toObjects);
+  const ccList = formatRecipients(ccObjects);
+  const bccList = formatRecipients(bccObjects);
+
+  const toField = toList.length ? toList : [clubEmail];
+  const ccField = ccList.length ? ccList : undefined;
+  const bccField = bccList.length ? bccList : undefined;
+
+  const attendeeList = attendeeObjects.map((p) => ({
+    name: p.name || p.email,
+    email: p.email,
+  }));
+  const greetingName = recipientName || "all participants";
 
   // Parse date and time for the .ics event
   const meetingDate = new Date(date);
@@ -326,10 +381,7 @@ export const sendMeetingInvitationEmail = async (
       name: "Sports Club",
       email: process.env.EMAIL_USER_OFFICIAL || "",
     },
-    attendees: params.allParticipants.map((email) => ({
-      name: email,
-      email: email,
-    })),
+    attendees: attendeeList,
   });
 
   if (icsResult.error) {
@@ -340,7 +392,9 @@ export const sendMeetingInvitationEmail = async (
 
   const mailOptions = {
     from: `"Sports Club" <${process.env.EMAIL_USER_OFFICIAL}>`,
-    to: to,
+    to: toField,
+    cc: ccField,
+    bcc: bccField,
     subject: title,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #333;">
@@ -349,7 +403,7 @@ export const sendMeetingInvitationEmail = async (
 
           <!-- Greeting -->
           <p style="font-size: 15px; line-height: 1.6; color: #111; margin: 0 0 24px 0;">
-            Hi <strong>${recipientName}</strong>, you have a new meeting to discuss about <strong>${topic}</strong>.
+            Hi <strong>${greetingName}</strong>, you have a new meeting to discuss about <strong>${topic}</strong>.
           </p>
 
           <!-- Details table -->
@@ -395,7 +449,7 @@ export const sendMeetingInvitationEmail = async (
 
   try {
     await getOfficialTransporter().sendMail(mailOptions);
-    console.log(`[Email] Meeting invitation sent to ${to}`);
+    console.log(`[Email] Meeting invitation sent to participants via ${clubEmail}`);
   } catch (error) {
     console.error("[Email] Failed to send meeting invitation:", error);
   }

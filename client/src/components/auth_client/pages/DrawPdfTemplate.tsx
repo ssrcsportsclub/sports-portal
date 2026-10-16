@@ -1,33 +1,33 @@
 import logo from "../../../assets/logo_main.png";
+import {
+  buildBracket,
+  computeStandings,
+  matchdays,
+  pointsLegend,
+  qualifierCount,
+  scoringOf,
+  stageLabel,
+  tablesOf,
+  type Draw,
+  type TeamRef,
+} from "../../../lib/tournament";
 
 /* ─────────────────────────────────────────
    KNOCKOUT BRACKET TEMPLATE
 ───────────────────────────────────────── */
-const KnockoutPdfTemplate = ({ draw }: { draw: any }) => {
-  const teams = draw.drawnTeams;
-  const n = teams.length;
-  if (n === 0) return null;
+const KnockoutPdfTemplate = ({ draw }: { draw: Draw }) => {
+  const bracket = buildBracket(draw);
+  if (!bracket) return null;
 
-  const p = Math.pow(2, Math.ceil(Math.log2(n)));
-  const rounds: number[] = [];
-  let currSize = p;
-  while (currSize >= 1) {
-    rounds.push(currSize);
-    currSize /= 2;
-  }
-
+  const rounds = [...bracket.rounds, 1];
   const ROUND_COLORS = ["#2b8a5e", "#2c699a", "#28a0bd", "#6ccceb", "#DD1D25"];
 
-  const getWinner = (roundSize: number, matchIdx: number) => {
-    const matchId = `r${roundSize}m${matchIdx}`;
-    const winnerId = draw.matchResults?.[matchId];
-    return teams.find((t: any) => t._id === winnerId) || null;
-  };
-
-  const getTeam = (roundSize: number, matchIdx: number, slotIdx: number) => {
-    if (roundSize === p) return teams[matchIdx * 2 + slotIdx] || null;
-    return getWinner(roundSize * 2, matchIdx * 2 + slotIdx);
-  };
+  const getWinner = (roundSize: number, matchIdx: number) =>
+    bracket.winner(roundSize, matchIdx);
+  const getTeam = (roundSize: number, matchIdx: number, slotIdx: 0 | 1) =>
+    bracket.team(roundSize, matchIdx, slotIdx);
+  const emptyLabel = (roundSize: number, matchIdx: number, slotIdx: 0 | 1) =>
+    bracket.isBye(roundSize, matchIdx, slotIdx) ? "Bye" : "To be determined";
 
   const minHeight = Math.max(600, rounds[0] * 70);
 
@@ -108,7 +108,7 @@ const KnockoutPdfTemplate = ({ draw }: { draw: any }) => {
                         overflowWrap: "break-word",
                       }}
                     >
-                      {team1 ? team1.name : "To be determined"}
+                      {team1 ? team1.name : emptyLabel(roundSize, matchIdx, 0)}
                     </div>
                     {score0 && (
                       <div className="text-center font-bold text-zinc-800 mt-1 text-sm absolute top-full left-0 w-full">
@@ -125,7 +125,7 @@ const KnockoutPdfTemplate = ({ draw }: { draw: any }) => {
                         overflowWrap: "break-word",
                       }}
                     >
-                      {team2 ? team2.name : "To be determined"}
+                      {team2 ? team2.name : emptyLabel(roundSize, matchIdx, 1)}
                     </div>
                     {score1 && (
                       <div className="text-center font-bold text-zinc-800 mt-1 text-sm absolute top-full left-0 w-full">
@@ -175,64 +175,13 @@ const KnockoutPdfTemplate = ({ draw }: { draw: any }) => {
    Section 2: Match Schedule table
    Section 3: Standings per group (W=1pt, L=0pt)
 ───────────────────────────────────────── */
-const GroupPdfTemplate = ({ draw }: { draw: any }) => {
-  const storedGroupings: { name: string; teams: any[] }[] =
-    draw.groupings && draw.groupings.length > 0
-      ? draw.groupings
-      : (() => {
-          const chunks: { name: string; teams: any[] }[] = [];
-          const all = draw.drawnTeams;
-          for (let i = 0; i < all.length; i += 4)
-            chunks.push({
-              name: String.fromCharCode(65 + chunks.length),
-              teams: all.slice(i, i + 4),
-            });
-          return chunks;
-        })();
-
-  const groupMatchId = (gName: string, t1: any, t2: any) => {
-    const ids = [t1._id, t2._id].sort();
-    return `group_${gName}_${ids[0]}_${ids[1]}`;
-  };
-
-  const computeStandings = (gName: string, groupTeams: any[]) =>
-    groupTeams
-      .map((team) => {
-        let P = 0,
-          W = 0,
-          L = 0,
-          Pts = 0,
-          SF = 0,
-          SA = 0;
-        groupTeams.forEach((opp) => {
-          if (opp._id === team._id) return;
-          const mid = groupMatchId(gName, team, opp);
-          const result = draw.matchResults?.[mid];
-          const score = draw.matchScores?.[mid];
-          if (score && result) {
-            const parts = score.split(/\s*-\s*/).map(Number);
-            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-              const high = Math.max(parts[0], parts[1]);
-              const low = Math.min(parts[0], parts[1]);
-              if (result === team._id) {
-                SF += high;
-                SA += low;
-              } else {
-                SF += low;
-                SA += high;
-              }
-            }
-          }
-          if (!result) return;
-          P++;
-          if (result === team._id) {
-            W++;
-            Pts++;
-          } else L++;
-        });
-        return { team, P, W, L, Pts, Diff: SF - SA };
-      })
-      .sort((a, b) => (b.Pts !== a.Pts ? b.Pts - a.Pts : b.Diff - a.Diff));
+const GroupPdfTemplate = ({ draw }: { draw: Draw }) => {
+  const isLeague = draw.format === "League";
+  const storedGroupings = tablesOf(draw);
+  const tableTitle = (name: string) =>
+    isLeague ? "League Table" : `Group ${name}`;
+  const qualifiers = qualifierCount(draw);
+  const showDraws = scoringOf(draw) === "football";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "60px" }}>
@@ -250,7 +199,7 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
             paddingLeft: "12px",
           }}
         >
-          Group Assignments
+          {isLeague ? "League Participants" : "Group Assignments"}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "20px" }}>
           {storedGroupings.map((group) => (
@@ -273,10 +222,10 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                     letterSpacing: "0.2em",
                   }}
                 >
-                  Group {group.name}
+                  {tableTitle(group.name)}
                 </span>
               </div>
-              {group.teams.map((team: any, idx: number) => (
+              {group.teams.map((team: TeamRef, idx: number) => (
                 <div
                   key={team._id}
                   style={{
@@ -416,129 +365,131 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
           </thead>
           <tbody>
             {storedGroupings.map((group) => {
-              const gMatches: [any, any][] = [];
-              for (let i = 0; i < group.teams.length; i++)
-                for (let j = i + 1; j < group.teams.length; j++)
-                  gMatches.push([group.teams[i], group.teams[j]]);
-              return gMatches.map(([t1, t2], mi) => {
-                const mid = groupMatchId(group.name, t1, t2);
-                const score = draw.matchScores?.[mid];
-                const result = draw.matchResults?.[mid];
-                const isT1Win = result === t1._id;
-                const isT2Win = result === t2._id;
-                return (
-                  <tr
-                    key={`${group.name}-${mi}`}
-                    style={{
-                      background: mi % 2 === 0 ? "#fff" : "#fafafa",
-                      borderBottom: "1px solid #f0f0f0",
-                    }}
-                  >
-                    <td
+              const gMatches = matchdays(group).flatMap((day, d) =>
+                day.fixtures.map((f) => ({ ...f, day: d + 1 })),
+              );
+              return gMatches.map(
+                ({ id: mid, home: t1, away: t2, day }, mi) => {
+                  const score = draw.matchScores?.[mid];
+                  const result = draw.matchResults?.[mid];
+                  const isT1Win = result === t1._id;
+                  const isT2Win = result === t2._id;
+                  return (
+                    <tr
+                      key={`${group.name}-${mi}`}
                       style={{
-                        padding: "16px 14px",
-                        color: "#71717a",
-                        fontWeight: 800,
-                        fontSize: "11px",
-                        lineHeight: "1.5",
+                        background: mi % 2 === 0 ? "#fff" : "#fafafa",
+                        borderBottom: "1px solid #f0f0f0",
                       }}
                     >
-                      GRP {group.name}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px 14px",
-                        textAlign: "right",
-                        fontWeight: isT1Win ? 900 : 700,
-                        color: isT1Win ? "#DD1D25" : "#18181b",
-                        fontSize: "13px",
-                        textTransform: "uppercase",
-                        lineHeight: "1.5",
-                        wordBreak: "break-word",
-                        overflowWrap: "break-word",
-                      }}
-                    >
-                      {t1.name}
-                    </td>
-                    <td style={{ padding: "16px 14px", textAlign: "center" }}>
-                      {score ? (
-                        <span
-                          style={{
-                            fontWeight: 900,
-                            background: "#18181b",
-                            color: "#fff",
-                            padding: "8px 16px",
-                            borderRadius: "100px",
-                            fontSize: "12px",
-                            letterSpacing: "0.1em",
-                            lineHeight: "1",
-                          }}
-                        >
-                          {score}
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            color: "#a1a1aa",
-                            fontWeight: 800,
-                            fontSize: "11px",
-                            border: "1px dashed #e4e4e7",
-                            padding: "6px 16px",
-                            borderRadius: "100px",
-                            lineHeight: "1",
-                          }}
-                        >
-                          VS
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px 14px",
-                        textAlign: "left",
-                        fontWeight: isT2Win ? 900 : 700,
-                        color: isT2Win ? "#DD1D25" : "#18181b",
-                        fontSize: "13px",
-                        textTransform: "uppercase",
-                        lineHeight: "1.5",
-                        wordBreak: "break-word",
-                        overflowWrap: "break-word",
-                      }}
-                    >
-                      {t2.name}
-                    </td>
-                    <td style={{ padding: "16px 14px", textAlign: "center" }}>
-                      {result ? (
-                        <span
-                          style={{
-                            background: "#DD1D25",
-                            color: "#fff",
-                            padding: "6px 12px",
-                            borderRadius: "4px",
-                            fontSize: "10px",
-                            fontWeight: 900,
-                            letterSpacing: "0.05em",
-                            lineHeight: "1",
-                          }}
-                        >
-                          WIN
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            color: "#d4d4d8",
-                            fontSize: "10px",
-                            fontWeight: 800,
-                            lineHeight: "1",
-                          }}
-                        >
-                          TBD
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              });
+                      <td
+                        style={{
+                          padding: "16px 14px",
+                          color: "#71717a",
+                          fontWeight: 800,
+                          fontSize: "11px",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        {isLeague
+                          ? `MD ${day}`
+                          : `GRP ${group.name} · MD ${day}`}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px 14px",
+                          textAlign: "right",
+                          fontWeight: isT1Win ? 900 : 700,
+                          color: isT1Win ? "#DD1D25" : "#18181b",
+                          fontSize: "13px",
+                          textTransform: "uppercase",
+                          lineHeight: "1.5",
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                        }}
+                      >
+                        {t1.name}
+                      </td>
+                      <td style={{ padding: "16px 14px", textAlign: "center" }}>
+                        {score ? (
+                          <span
+                            style={{
+                              fontWeight: 900,
+                              background: "#18181b",
+                              color: "#fff",
+                              padding: "8px 16px",
+                              borderRadius: "100px",
+                              fontSize: "12px",
+                              letterSpacing: "0.1em",
+                              lineHeight: "1",
+                            }}
+                          >
+                            {score}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#a1a1aa",
+                              fontWeight: 800,
+                              fontSize: "11px",
+                              border: "1px dashed #e4e4e7",
+                              padding: "6px 16px",
+                              borderRadius: "100px",
+                              lineHeight: "1",
+                            }}
+                          >
+                            VS
+                          </span>
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px 14px",
+                          textAlign: "left",
+                          fontWeight: isT2Win ? 900 : 700,
+                          color: isT2Win ? "#DD1D25" : "#18181b",
+                          fontSize: "13px",
+                          textTransform: "uppercase",
+                          lineHeight: "1.5",
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                        }}
+                      >
+                        {t2.name}
+                      </td>
+                      <td style={{ padding: "16px 14px", textAlign: "center" }}>
+                        {result ? (
+                          <span
+                            style={{
+                              background: "#DD1D25",
+                              color: "#fff",
+                              padding: "6px 12px",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                              fontWeight: 900,
+                              letterSpacing: "0.05em",
+                              lineHeight: "1",
+                            }}
+                          >
+                            {result === "DRAW" ? "DRAW" : "WIN"}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              color: "#d4d4d8",
+                              fontSize: "10px",
+                              fontWeight: 800,
+                              lineHeight: "1",
+                            }}
+                          >
+                            TBD
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                },
+              );
             })}
           </tbody>
         </table>
@@ -558,11 +509,11 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
             paddingLeft: "12px",
           }}
         >
-          Group Standings
+          {isLeague ? "League Standings" : "Group Standings"}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "32px" }}>
           {storedGroupings.map((group) => {
-            const standings = computeStandings(group.name, group.teams);
+            const standings = computeStandings(draw, group);
             return (
               <div key={group.name} style={{ flex: "1", minWidth: "320px" }}>
                 <div
@@ -576,7 +527,7 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                     letterSpacing: "0.1em",
                   }}
                 >
-                  Group {group.name}
+                  {tableTitle(group.name)}
                 </div>
                 <table
                   style={{
@@ -598,7 +549,14 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                       >
                         TEAM
                       </th>
-                      {["P", "W", "L", "DIFF", "PTS"].map((h) => (
+                      {[
+                        "P",
+                        "W",
+                        ...(showDraws ? ["D"] : []),
+                        "L",
+                        "GD",
+                        "PTS",
+                      ].map((h) => (
                         <th
                           key={h}
                           style={{
@@ -641,7 +599,7 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                               lineHeight: "1.4",
                             }}
                           >
-                            {ri < 2 && (
+                            {ri < qualifiers && (
                               <span
                                 style={{
                                   width: "10px",
@@ -654,7 +612,7 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                             )}
                             <span
                               style={{
-                                fontWeight: ri < 2 ? 900 : 700,
+                                fontWeight: ri < qualifiers ? 900 : 700,
                                 fontSize: "13px",
                                 color: "#18181b",
                                 textTransform: "uppercase",
@@ -690,6 +648,20 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                         >
                           {row.W}
                         </td>
+                        {showDraws && (
+                          <td
+                            style={{
+                              padding: "16px 12px",
+                              textAlign: "center",
+                              fontSize: "13px",
+                              fontWeight: 800,
+                              color: "#71717a",
+                              lineHeight: "1.4",
+                            }}
+                          >
+                            {row.D}
+                          </td>
+                        )}
                         <td
                           style={{
                             padding: "16px 12px",
@@ -709,15 +681,15 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
                             fontSize: "13px",
                             fontWeight: 800,
                             color:
-                              row.Diff > 0
+                              row.GD > 0
                                 ? "#16a34a"
-                                : row.Diff < 0
+                                : row.GD < 0
                                   ? "#dc2626"
                                   : "#a1a1aa",
                             lineHeight: "1.4",
                           }}
                         >
-                          {row.Diff > 0 ? `+${row.Diff}` : row.Diff}
+                          {row.GD > 0 ? `+${row.GD}` : row.GD}
                         </td>
                         <td
                           style={{
@@ -748,7 +720,9 @@ const GroupPdfTemplate = ({ draw }: { draw: any }) => {
             fontWeight: 800,
           }}
         >
-          🔴 TOP 2 ADVANCE · WIN = 1 PT · LOSS = 0 PTS
+          {qualifiers > 0 &&
+            `🔴 TOP ${qualifiers} ${draw.qualifiers ? "QUALIFIED" : "ADVANCE"} · `}
+          {pointsLegend(draw).toUpperCase()}
         </div>
       </div>
     </div>
@@ -762,7 +736,7 @@ export const DrawPdfTemplate = ({
   draws,
   eventTitle,
 }: {
-  draws: any[];
+  draws: Draw[];
   eventTitle: string;
 }) => {
   return (
@@ -895,7 +869,7 @@ export const DrawPdfTemplate = ({
                 letterSpacing: "0.15em",
               }}
             >
-              {draw.format} Stage
+              {stageLabel(draw)}
             </span>
             <div style={{ flex: 1, height: "2px", background: "#f4f4f5" }} />
           </div>

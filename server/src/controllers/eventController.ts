@@ -8,7 +8,7 @@ import { UserRole } from "../models/User.js";
 // @access  Public or Private (Requirements imply all roles can view all events eventually)
 export const getEvents = async (req: Request, res: Response) => {
   try {
-    const events = await Event.find({}).sort({ date: 1 });
+    const events = await Event.find({}).sort({ date: 1 }).lean();
     res.json(events);
   } catch (error) {
     res.status(500).json({ message: (error as Error).message });

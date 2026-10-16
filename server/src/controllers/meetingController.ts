@@ -1,7 +1,30 @@
 import type { Request, Response } from "express";
 import Meeting from "../models/Meeting.js";
-import User from "../models/User.js";
 import { sendMeetingInvitationEmail } from "../utils/emailHelper.js";
+
+type RecipientInput = string | { email: string; name?: string };
+
+const normalizeRecipients = (
+  list?: RecipientInput | RecipientInput[],
+): { email: string; name?: string }[] => {
+  if (!list) return [];
+  const arr = Array.isArray(list) ? list : [list];
+  const normalized = arr
+    .map((item) =>
+      typeof item === "string"
+        ? { email: item, name: undefined }
+        : { email: item.email, name: item.name },
+    )
+    .filter((item) => item.email);
+
+  const seen = new Set<string>();
+  return normalized.filter((item) => {
+    const key = item.email.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 export const createMeeting = async (req: Request, res: Response) => {
   try {
@@ -14,7 +37,11 @@ export const createMeeting = async (req: Request, res: Response) => {
       meetingLink,
       date,
       time,
-      participants, // array of emails
+      participants, // optional array of emails or { email, name }
+      recipientName, // optional greeting provided by frontend
+      to,
+      cc,
+      bcc,
     } = req.body;
 
     if (!title || !topic || !type || !date || !time) {
@@ -35,11 +62,29 @@ export const createMeeting = async (req: Request, res: Response) => {
         .json({ message: "Meeting link is required for virtual meetings" });
     }
 
-    if (!participants || participants.length === 0) {
+    const toArr = Array.isArray(to) ? to : to ? [to] : [];
+    const ccArr = Array.isArray(cc) ? cc : cc ? [cc] : [];
+    const bccArr = Array.isArray(bcc) ? bcc : bcc ? [bcc] : [];
+    const participantArr = Array.isArray(participants)
+      ? participants
+      : participants
+        ? [participants]
+        : [];
+
+    const allRecipientObjects = normalizeRecipients([
+      ...participantArr,
+      ...toArr,
+      ...ccArr,
+      ...bccArr,
+    ]);
+
+    if (allRecipientObjects.length === 0) {
       return res
         .status(400)
-        .json({ message: "At least one participant is required" });
+        .json({ message: "At least one recipient (to/cc/bcc) is required" });
     }
+
+    const participantEmails = allRecipientObjects.map((p) => p.email);
 
     const meeting = await Meeting.create({
       title,
@@ -50,17 +95,8 @@ export const createMeeting = async (req: Request, res: Response) => {
       meetingLink,
       date,
       time,
-      participants,
+      participants: participantEmails,
       createdBy: req.user!._id,
-    });
-
-    // Resolve participant names from DB where possible
-    const users = await User.find({ email: { $in: participants } }).select(
-      "email name",
-    );
-    const nameMap: Record<string, string> = {};
-    users.forEach((u) => {
-      nameMap[u.email] = u.name;
     });
 
     // Determine location string
@@ -69,27 +105,25 @@ export const createMeeting = async (req: Request, res: Response) => {
         ? meetingLink
         : `${venue}${roomNo ? `, Room ${roomNo}` : ""}`;
 
-    // Send emails to all participants
-    for (const email of participants) {
-      const recipientName = nameMap[email] || email.split("@")[0];
-      try {
-        await sendMeetingInvitationEmail({
-          to: email,
-          recipientName,
-          title,
-          topic,
-          date,
-          time,
-          location: location || "",
-          meetingLink: type === "virtual" ? meetingLink : undefined,
-          type,
-          venue,
-          roomNo,
-          allParticipants: participants,
-        });
-      } catch (emailErr) {
-        console.error(`[Meeting] Failed to send email to ${email}:`, emailErr);
-      }
+    try {
+      await sendMeetingInvitationEmail({
+        recipientName: recipientName || undefined,
+        to,
+        cc,
+        bcc,
+        title,
+        topic,
+        date,
+        time,
+        location: location || "",
+        meetingLink: type === "virtual" ? meetingLink : undefined,
+        type,
+        venue,
+        roomNo,
+        allParticipants: allRecipientObjects,
+      });
+    } catch (emailErr) {
+      console.error("[Meeting] Failed to send meeting invitation:", emailErr);
     }
 
     res.status(201).json(meeting);
@@ -110,12 +144,14 @@ export const getMeetings = async (req: Request, res: Response) => {
     if (userRole === "admin") {
       meetings = await Meeting.find()
         .populate("createdBy", "name email")
-        .sort({ date: -1 });
+        .sort({ date: -1 })
+        .lean();
     } else {
       // Other users only see meetings they are participants of
       meetings = await Meeting.find({ participants: userEmail })
         .populate("createdBy", "name email")
-        .sort({ date: -1 });
+        .sort({ date: -1 })
+        .lean();
     }
 
     res.json(meetings);

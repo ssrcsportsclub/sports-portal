@@ -11,13 +11,30 @@ import {
   forceReturn,
   getChainOfCustodyReport,
   getWaitlist,
+  getWaitlists,
 } from "../controllers/equipmentController.js";
+import {
+  getRequestWindow,
+  updateRequestWindow,
+} from "../controllers/requestWindowController.js";
 import { protect, authorize } from "../middlewares/authMiddleware.js";
+import { validateBody } from "../middlewares/validateRequest.js";
+import { requestWindowSchema } from "../schemas/index.js";
 import { UserRole } from "../models/User.js";
 
 const router = express.Router();
 
 router.use(protect);
+
+// Request window: everyone can read it; staff who manage requests can change it.
+// Registered before the "/:id" routes so "request-window" is not taken as an id.
+router.get("/request-window", getRequestWindow);
+router.put(
+  "/request-window",
+  authorize(UserRole.ADMIN, UserRole.SUPERUSER, UserRole.MODERATOR),
+  validateBody(requestWindowSchema),
+  updateRequestWindow,
+);
 
 // Inventory
 router.get("/", getEquipment); // Viewable by all logged in? Dashboards say "View equipments" for Super/Admin. Mod doesn't say.
@@ -48,6 +65,7 @@ router.put(
 );
 
 // Actions
+router.get("/waitlists", getWaitlists); // batched: ?ids=a,b,c
 router.get("/waitlist/:id", getWaitlist); // View waitlist for an item (Any user can see who is waiting?)
 router.post("/transfer/:id", transferEquipment); // Student transferring their responsibility
 router.post(

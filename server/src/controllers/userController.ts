@@ -3,6 +3,10 @@ import User, { UserRole } from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { sendUserCredentialsEmail } from "../utils/emailHelper.js";
 
+/** Treat search input literally: no regex syntax, no catastrophic patterns. */
+const escapeRegex = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // @desc    Get users with optional role filter, search, and pagination
 // @route   GET /api/users?role=&q=&page=&limit=
 // @access  Private/Admin/Staff/Moderator
@@ -18,7 +22,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
     // Search by name or email (minimum 2 chars)
     if (q && typeof q === "string" && q.trim().length >= 2) {
-      const regex = new RegExp(q.trim(), "i");
+      const regex = new RegExp(escapeRegex(q.trim()), "i");
       filter.$or = [{ name: regex }, { email: regex }];
     }
 
@@ -60,7 +64,7 @@ export const searchUsers = async (req: Request, res: Response) => {
       return res.json([]);
     }
 
-    const regex = new RegExp(q.trim(), "i");
+    const regex = new RegExp(escapeRegex(q.trim()), "i");
     const users = await User.find({
       $or: [{ name: regex }, { email: regex }],
     })

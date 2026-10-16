@@ -38,3 +38,39 @@ export const formSubmissionSchema = z
     // Add other common fields or keep it flexible for dynamic forms
   })
   .passthrough();
+
+const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid id");
+
+export const createDrawSchema = z.object({
+  event: objectId,
+  format: z.enum(["Group", "Knockout", "League"]),
+  sport: z.string().min(1, "Sport is required"),
+  teamSize: z.number().int().positive().optional(),
+  scoring: z.enum(["football", "winOnly"]).optional(),
+  drawnTeams: z.array(objectId).min(2, "A draw needs at least 2 teams"),
+  groupings: z
+    .array(z.object({ name: z.string().min(1), teams: z.array(objectId) }))
+    .optional(),
+});
+
+export const advanceDrawSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("groups"),
+    qualifiers: z.number().int().min(2),
+    groupSize: z.number().int().min(2),
+  }),
+  z.object({
+    mode: z.literal("knockout"),
+    qualifiers: z.number().int().min(2).optional(),
+    seeding: z.enum(["ranked", "draw"]).optional(),
+    perGroup: z.number().int().min(1).optional(),
+    bestPlaced: z.number().int().min(0).optional(),
+  }),
+]);
+
+export const requestWindowSchema = z.object({
+  mode: z.enum(["scheduled", "open", "closed"]).optional(),
+  openHour: z.number().int().min(0).max(23).optional(),
+  closeHour: z.number().int().min(1).max(24).optional(),
+  note: z.string().max(200).optional(),
+});

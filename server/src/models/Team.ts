@@ -55,7 +55,11 @@ TeamSchema.index({ teamType: 1 });
 TeamSchema.index({ event: 1 });
 TeamSchema.index({ sport: 1 });
 
-// Unique constraint: name must be unique within the same event (for event teams)
+// "My team" looks teams up by member email or executive.
+TeamSchema.index({ "members.email": 1 });
+TeamSchema.index({ executive: 1 });
+
+// Unique constraint: name must be unique within the same event// Unique constraint: name must be unique within the same event (for event teams)
 TeamSchema.index(
   { name: 1, event: 1 },
   {

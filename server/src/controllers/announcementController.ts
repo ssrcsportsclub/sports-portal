@@ -95,7 +95,8 @@ export const getAnnouncements = async (req: Request, res: Response) => {
     const announcements = await Announcement.find({})
       .sort({ createdAt: -1 })
       .populate("author", "name role")
-      .populate("comments.userId", "name role");
+      .populate("comments.userId", "name role")
+      .lean();
 
     const transformed = announcements.map((ann) =>
       transformAnnouncement(ann, userId),
@@ -133,11 +134,19 @@ export const createAnnouncement = async (req: Request, res: Response) => {
         const list = await NotificationList.findOne({ name: "announcements" });
         if (list && list.emails.length > 0) {
           // Fetch names for these emails if possible, or just send generic
-          const users = await User.find({ email: { $in: list.emails } }).select(
-            "email name",
-          );
-          for (const user of users) {
-            await sendAnnouncementEmail(user.email, user.name, title, content);
+          const users = await User.find({ email: { $in: list.emails } })
+            .select("email name")
+            .lean();
+          // Send in small concurrent batches instead of one at a time.
+          const BATCH = 5;
+          for (let i = 0; i < users.length; i += BATCH) {
+            await Promise.allSettled(
+              users
+                .slice(i, i + BATCH)
+                .map((user) =>
+                  sendAnnouncementEmail(user.email, user.name, title, content),
+                ),
+            );
           }
         }
       } catch (emailError) {

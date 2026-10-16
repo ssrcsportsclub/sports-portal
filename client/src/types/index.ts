@@ -268,6 +268,11 @@ export interface Meeting {
   updatedAt: string;
 }
 
+export interface MeetingParticipantInput {
+  email: string;
+  name?: string;
+}
+
 export interface MeetingCreate {
   title: string;
   topic: string;
@@ -277,5 +282,9 @@ export interface MeetingCreate {
   meetingLink?: string;
   date: string;
   time: string;
-  participants: string[];
+  participants?: MeetingParticipantInput[];
+  recipientName?: string;
+  to?: MeetingParticipantInput[];
+  cc?: MeetingParticipantInput[];
+  bcc?: MeetingParticipantInput[];
 }

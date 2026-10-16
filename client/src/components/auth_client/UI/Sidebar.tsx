@@ -322,6 +322,11 @@ export function Sidebar({ className }: SidebarProps) {
           href: "/dashboard/members",
         },
         {
+          label: "All Teams",
+          icon: UsersIcon,
+          href: "/dashboard/all-teams",
+        },
+        {
           label: "Feedback",
           icon: MessageSquareIcon,
           href: "/dashboard/feedback",

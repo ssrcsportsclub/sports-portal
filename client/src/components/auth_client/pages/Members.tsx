@@ -3,7 +3,7 @@ import api from "../../../services/api";
 import type { PaginatedUsersResponse } from "../../../services/user.service";
 import { useAppSelector } from "../../../store/hooks";
 import Modal from "../../ui/Modal";
-import LoadingSpinner from "../../ui/LoadingSpinner";
+import { HeaderSkeleton, TableSkeleton } from "../../ui/Skeleton";
 
 interface User {
   _id: string;
@@ -66,12 +66,16 @@ const MEMBER_CATEGORIES = [
 
 const Members = () => {
   const { user: currentUser } = useAppSelector((state) => state.auth);
-  const [categoryData, setCategoryData] = useState<Record<string, CategoryState>>({});
+  const [categoryData, setCategoryData] = useState<
+    Record<string, CategoryState>
+  >({});
   const [globalLoading, setGlobalLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Search & pagination state per category role
-  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>(
+    {},
+  );
   const debouncedSearchQueries = useDebounce(searchQueries, 300);
   const [currentPages, setCurrentPages] = useState<Record<string, number>>({});
 
@@ -132,7 +136,6 @@ const Members = () => {
   };
 
   // Initial load: fetch all categories
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const init = async () => {
       setGlobalLoading(true);
@@ -148,7 +151,7 @@ const Members = () => {
       }
     };
     init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Debounced search effect: fires when the user stops typing (after 300 ms)
   useEffect(() => {
@@ -163,7 +166,7 @@ const Members = () => {
     PAGINATED_ROLES.forEach((role) => {
       fetchCategoryData(role, debouncedSearchQueries[role] ?? "", 1);
     });
-  }, [debouncedSearchQueries]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSearchQueries]);
 
   // Page navigation effect: fires when the user clicks a page button
   useEffect(() => {
@@ -239,7 +242,12 @@ const Members = () => {
   };
 
   if (globalLoading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="p-6 space-y-6">
+        <HeaderSkeleton action={false} />
+        <TableSkeleton rows={8} label="Loading members" />
+      </div>
+    );
   }
 
   if (error) {
@@ -350,7 +358,9 @@ const Members = () => {
                     type="text"
                     placeholder={`Search ${cat.label}s by name or email…`}
                     value={searchQuery}
-                    onChange={(e) => updateSearchQuery(cat.role, e.target.value)}
+                    onChange={(e) =>
+                      updateSearchQuery(cat.role, e.target.value)
+                    }
                     className="w-full pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:ring-2 focus:ring-[#DD1D25] focus:border-transparent outline-none transition-all shadow-sm"
                   />
                 </div>
@@ -364,10 +374,7 @@ const Members = () => {
                 <div className="py-10 text-center text-zinc-400 text-sm font-medium">
                   No {cat.label.toLowerCase()}s found
                   {hasActiveSearch && (
-                    <>
-                      {" "}
-                      matching &ldquo;{searchQuery}&rdquo;
-                    </>
+                    <> matching &ldquo;{searchQuery}&rdquo;</>
                   )}
                   .
                 </div>

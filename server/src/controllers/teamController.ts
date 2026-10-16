@@ -9,7 +9,9 @@ export const getTeams = async (req: Request, res: Response) => {
   try {
     const teams = await Team.find({
       event: { $exists: true, $ne: null },
-    }).populate("executive", "name email");
+    })
+      .populate("executive", "name email")
+      .lean();
     res.json(teams);
   } catch (error) {
     res.status(500).json({ message: (error as Error).message });
@@ -28,7 +30,9 @@ export const getMyTeam = async (req: Request, res: Response) => {
       $or: [{ "members.email": req.user.email }, { executive: req.user._id }],
     })
       .populate("executive", "name email")
-      .populate("event");
+      // Only what the page shows and filters on, not the whole event.
+      .populate("event", "title date endDate location")
+      .lean();
 
     // Filter out teams if the event doesn't exist or has ended
     const filteredTeams = teams.filter((team) => {

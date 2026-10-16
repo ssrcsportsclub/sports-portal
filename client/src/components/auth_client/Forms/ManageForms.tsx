@@ -7,6 +7,7 @@ import {
   updateForm,
 } from "../../../store/slices/formSlice";
 import { FormSubmissions } from "./FormSubmissions";
+import { CardGridSkeleton } from "../../ui/Skeleton";
 
 // Icons
 const ClipboardListIcon = ({ className }: { className?: string }) => (
@@ -194,8 +195,8 @@ export const ManageForms = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {loading && forms.length === 0 ? (
-          <div className="col-span-full flex justify-center p-12">
-            <div className="w-8 h-8 border-4 border-[#DD1D25] border-t-transparent rounded-full animate-spin"></div>
+          <div className="col-span-full">
+            <CardGridSkeleton count={4} label="Loading forms" />
           </div>
         ) : filteredForms.length === 0 ? (
           <div className="col-span-full text-center p-12 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-800">

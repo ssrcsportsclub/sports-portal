@@ -59,6 +59,12 @@ const ResponsibilitySchema: Schema = new Schema(
   { timestamps: true },
 );
 
+// Indexes for the hot queries: "my requests", anti-hoarding checks,
+// FIFO waitlists per item and status filters.
+ResponsibilitySchema.index({ user: 1, equipment: 1, status: 1 });
+ResponsibilitySchema.index({ equipment: 1, status: 1, requestDate: 1 });
+ResponsibilitySchema.index({ status: 1 });
+
 export default mongoose.model<IResponsibility>(
   "Responsibility",
   ResponsibilitySchema,

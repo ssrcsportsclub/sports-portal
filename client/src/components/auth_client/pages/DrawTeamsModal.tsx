@@ -1,6 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "react-hot-toast";
 import Modal from "../../ui/Modal";
-import api from "../../../services/api";
+import { errorMessage, useCreateDrawMutation } from "../../../store/api";
+import {
+  balancedSizes,
+  fixtureCount,
+  matchdays,
+  roundName,
+  type Draw,
+  type DrawFormat,
+  type Scoring,
+} from "../../../lib/tournament";
 
 interface TeamMember {
   _id?: string;
@@ -31,10 +41,51 @@ interface DrawTeamsModalProps {
   events: Event[];
   initialSport?: string;
   initialEventId?: string;
+  onCreated?: (draw: Draw) => void;
 }
 
-type DrawFormat = "Group" | "Knockout";
 type DrawStep = "selectEvent" | "config" | "drawing" | "result";
+
+const FORMATS: { value: DrawFormat; label: string; sub: string }[] = [
+  {
+    value: "League",
+    label: "Champions League",
+    sub: "Everyone plays everyone in one big table, then groups or a knockout",
+  },
+  {
+    value: "Group",
+    label: "Group Stage",
+    sub: "Teams split into groups, top teams reach the playoffs",
+  },
+  {
+    value: "Knockout",
+    label: "Knockout",
+    sub: "Straight elimination bracket",
+  },
+];
+
+const shuffle = <T,>(items: T[]) => {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+/** Splits drawn teams into balanced groups A, B, C… in draw order. */
+const buildGroupings = (teams: Team[], perGroup: number) => {
+  const count = Math.max(1, Math.round(teams.length / perGroup));
+  let offset = 0;
+  return balancedSizes(teams.length, count).map((size, i) => {
+    const group = teams.slice(offset, offset + size);
+    offset += size;
+    return { name: String.fromCharCode(65 + i), teams: group };
+  });
+};
+
+const selectClass =
+  "w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#DD1D25]";
 
 const DrawTeamsModal = ({
   isOpen,
@@ -43,23 +94,47 @@ const DrawTeamsModal = ({
   events,
   initialSport = "",
   initialEventId = "",
+  onCreated,
 }: DrawTeamsModalProps) => {
   const [step, setStep] = useState<DrawStep>("selectEvent");
   const [selectedEvent, setSelectedEvent] = useState<string>(initialEventId);
   const [selectedSport, setSelectedSport] = useState<string>(initialSport);
-  const [format, setFormat] = useState<DrawFormat>("Group");
+  const [format, setFormat] = useState<DrawFormat>("League");
   const [teamSize, setTeamSize] = useState<number>(1);
+  const [perGroup, setPerGroup] = useState<number>(4);
+  const [scoring, setScoring] = useState<Scoring>("football");
   const [drawnTeams, setDrawnTeams] = useState<Team[]>([]);
   const [currentDrawIndex, setCurrentDrawIndex] = useState<number>(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedDraw, setSavedDraw] = useState<Draw | null>(null);
+  const saveStarted = useRef(false);
+  const [createDraw] = useCreateDrawMutation();
 
-  // Extract unique sports from only event-type teams
   const sports = Array.from(
     new Set(teams.filter((t) => t.teamType === "event").map((t) => t.sport)),
   ).sort();
+  const eligibleCount = teams.filter(
+    (t) => t.sport === selectedSport && t.teamType === "event",
+  ).length;
 
-  // Reset state when modal closes
+  const reset = useCallback(() => {
+    setStep("selectEvent");
+    setSelectedEvent("");
+    setSelectedSport("");
+    setFormat("League");
+    setTeamSize(1);
+    setPerGroup(4);
+    setScoring("football");
+    setDrawnTeams([]);
+    setCurrentDrawIndex(0);
+    setIsAnimating(false);
+    setIsSaving(false);
+    setSavedDraw(null);
+    saveStarted.current = false;
+  }, []);
+
+  // Seed from props when opening; reset after the close animation.
   useEffect(() => {
     if (isOpen) {
       setSelectedSport(initialSport);
@@ -67,117 +142,117 @@ const DrawTeamsModal = ({
         setSelectedEvent(initialEventId);
         setStep("config");
       }
-    } else {
-      setTimeout(() => {
-        setStep("selectEvent");
-        setSelectedEvent("");
-        setSelectedSport("");
-        setFormat("Group");
-        setTeamSize(1);
-        setDrawnTeams([]);
-        setCurrentDrawIndex(0);
-        setIsAnimating(false);
-        setIsSaving(false);
-      }, 300);
+      return;
     }
-  }, [isOpen, initialSport]);
+    const timer = setTimeout(reset, 300);
+    return () => clearTimeout(timer);
+  }, [isOpen, initialSport, initialEventId, reset]);
+
+  const saveDraw = useCallback(async () => {
+    if (saveStarted.current) return;
+    saveStarted.current = true;
+    setIsSaving(true);
+    try {
+      const draw = await createDraw({
+        event: selectedEvent,
+        format,
+        sport: selectedSport,
+        teamSize: format === "Group" ? teamSize : undefined,
+        scoring: format === "Group" ? scoring : undefined,
+        drawnTeams: drawnTeams.map((t) => t._id),
+        groupings:
+          format === "Group"
+            ? buildGroupings(drawnTeams, perGroup).map((g) => ({
+                name: g.name,
+                teams: g.teams.map((t) => t._id),
+              }))
+            : undefined,
+      }).unwrap();
+      setSavedDraw(draw);
+      onCreated?.(draw);
+      toast.success("Draw saved");
+    } catch (error) {
+      saveStarted.current = false;
+      toast.error(errorMessage(error, "Draw completed but failed to save."));
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    selectedEvent,
+    format,
+    selectedSport,
+    teamSize,
+    scoring,
+    drawnTeams,
+    perGroup,
+    onCreated,
+    createDraw,
+  ]);
+
+  // Reveal one team at a time, then persist the draw once.
+  useEffect(() => {
+    if (!isAnimating) return;
+    if (currentDrawIndex < drawnTeams.length - 1) {
+      const timer = setTimeout(() => setCurrentDrawIndex((i) => i + 1), 800);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => {
+      setIsAnimating(false);
+      setStep("result");
+      saveDraw();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [isAnimating, currentDrawIndex, drawnTeams.length, saveDraw]);
 
   const handleEventSelect = () => {
     if (!selectedEvent) {
-      alert("Please select an event");
+      toast.error("Please select an event");
       return;
     }
-
     setStep("config");
   };
 
   const handleStartDraw = () => {
     if (!selectedSport) {
-      alert("Please select a sport");
+      toast.error("Please select a sport");
       return;
     }
-
-    // Filter teams by sport AND type (only tournament teams can be drawn)
     const filteredTeams = teams.filter(
       (t) => t.sport === selectedSport && t.teamType === "event",
     );
-
-    if (filteredTeams.length === 0) {
-      alert("No teams match the selected criteria");
+    if (filteredTeams.length < 2) {
+      toast.error("At least 2 event teams are needed for a draw");
       return;
     }
+    if (
+      !window.confirm(
+        `Start the ${FORMATS.find((f) => f.value === format)?.label} draw for ${selectedSport}? The order is randomised and saved.`,
+      )
+    )
+      return;
 
-    const confirmDraw = window.confirm(
-      `Are you sure you want to start the ${format} draw for ${selectedSport}? This will randomize the selection.`,
-    );
-    if (!confirmDraw) return;
-
-    // Shuffle teams
-    const shuffled = [...filteredTeams].sort(() => Math.random() - 0.5);
-    setDrawnTeams(shuffled);
+    setDrawnTeams(shuffle(filteredTeams));
+    setCurrentDrawIndex(0);
     setStep("drawing");
     setIsAnimating(true);
-    setCurrentDrawIndex(0);
   };
 
-  // Animation effect
-  useEffect(() => {
-    if (isAnimating && currentDrawIndex < drawnTeams.length) {
-      const timer = setTimeout(() => {
-        setCurrentDrawIndex((prev) => prev + 1);
-      }, 800);
-      return () => clearTimeout(timer);
-    } else if (isAnimating && currentDrawIndex >= drawnTeams.length) {
-      setIsAnimating(false);
-      setStep("result");
-      saveDraw();
-    }
-  }, [isAnimating, currentDrawIndex, drawnTeams.length]);
-
-  const saveDraw = async () => {
-    try {
-      setIsSaving(true);
-
-      // Build groupings for Group format: [{name: "A", teams: [id1, id2...]}, ...]
-      let groupings: { name: string; teams: string[] }[] | undefined;
-      if (format === "Group") {
-        const chunkSize = 4;
-        groupings = [];
-        for (let i = 0; i < drawnTeams.length; i += chunkSize) {
-          const chunk = drawnTeams.slice(i, i + chunkSize);
-          groupings.push({
-            name: String.fromCharCode(65 + groupings.length), // A, B, C...
-            teams: chunk.map((t) => t._id),
-          });
-        }
-      }
-
-      await api.post("/draws", {
-        event: selectedEvent,
-        format,
-        sport: selectedSport,
-        teamSize: format === "Group" ? teamSize : undefined,
-        drawnTeams: drawnTeams.map((t) => t._id),
-        groupings,
-      });
-    } catch (error) {
-      console.error("Error saving draw:", error);
-      alert("Draw completed but failed to save. Please try again.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const skipAnimation = () => setCurrentDrawIndex(drawnTeams.length - 1);
 
   const renderEventSelection = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">
+        <label
+          htmlFor="draw-event"
+          className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2"
+        >
           Select Event
         </label>
         <select
+          id="draw-event"
           value={selectedEvent}
           onChange={(e) => setSelectedEvent(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#DD1D25]"
+          className={selectClass}
         >
           <option value="">-- Choose Event --</option>
           {events.map((event) => (
@@ -197,16 +272,29 @@ const DrawTeamsModal = ({
     </div>
   );
 
+  const groupPreview = (() => {
+    if (eligibleCount < 2) return "";
+    const count = Math.max(1, Math.round(eligibleCount / perGroup));
+    const sizes = [...new Set(balancedSizes(eligibleCount, count))].sort(
+      (a, b) => b - a,
+    );
+    return `${count} group${count > 1 ? "s" : ""} of ${sizes.join(" or ")}`;
+  })();
+
   const renderConfig = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">
+        <label
+          htmlFor="draw-sport"
+          className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2"
+        >
           Select Sport
         </label>
         <select
+          id="draw-sport"
           value={selectedSport}
           onChange={(e) => setSelectedSport(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#DD1D25]"
+          className={selectClass}
         >
           <option value="">-- Choose Sport --</option>
           {sports.map((sport) => (
@@ -215,53 +303,109 @@ const DrawTeamsModal = ({
             </option>
           ))}
         </select>
+        {selectedSport && (
+          <p className="text-xs text-zinc-500 mt-1.5">
+            {eligibleCount} event team{eligibleCount === 1 ? "" : "s"} will be
+            drawn
+          </p>
+        )}
       </div>
 
       <div>
-        <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-3">
+        <span className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-3">
           Draw Format
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setFormat("Group")}
-            className={`py-3 px-4 rounded-lg font-bold transition-all ${
-              format === "Group"
-                ? "bg-[#DD1D25] text-white shadow-md"
-                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            }`}
-          >
-            Group
-          </button>
-          <button
-            onClick={() => setFormat("Knockout")}
-            className={`py-3 px-4 rounded-lg font-bold transition-all ${
-              format === "Knockout"
-                ? "bg-[#DD1D25] text-white shadow-md"
-                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            }`}
-          >
-            Knockout
-          </button>
+        </span>
+        <div className="space-y-2">
+          {FORMATS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFormat(f.value)}
+              aria-pressed={format === f.value}
+              className={`w-full p-3 rounded-xl border-2 text-left transition-all ${format === f.value ? "border-[#DD1D25] bg-[#DD1D25]/5" : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"}`}
+            >
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-50">
+                {f.label}
+              </span>
+              <span className="block text-xs text-zinc-500 mt-0.5">
+                {f.sub}
+              </span>
+            </button>
+          ))}
         </div>
+        {format === "League" && eligibleCount >= 2 && (
+          <p className="text-xs text-zinc-500 mt-2">
+            {eligibleCount} teams · {(eligibleCount * (eligibleCount - 1)) / 2}{" "}
+            fixtures over{" "}
+            {eligibleCount % 2 ? eligibleCount : eligibleCount - 1} matchdays ·
+            Win 3, Draw 1, Loss 0. After the league you choose how many teams
+            advance and whether they play groups or a knockout.
+          </p>
+        )}
       </div>
 
       {format === "Group" && (
-        <div>
-          <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">
-            Players Quantity per Team
-          </label>
-          <select
-            value={teamSize}
-            onChange={(e) => setTeamSize(Number(e.target.value))}
-            className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#DD1D25]"
-          >
-            <option value={1}>1 Team = 1 Player</option>
-            <option value={2}>1 Team = 2 Players</option>
-            <option value={4}>1 Team = 4 Players</option>
-            <option value={5}>1 Team = 5 Players</option>
-            <option value={6}>1 Team = 6 Players</option>
-            <option value={8}>1 Team = 8 Players</option>
-          </select>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label
+              htmlFor="draw-per-group"
+              className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2"
+            >
+              Teams per Group
+            </label>
+            <select
+              id="draw-per-group"
+              value={perGroup}
+              onChange={(e) => setPerGroup(Number(e.target.value))}
+              className={selectClass}
+            >
+              {[3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>
+                  {n} teams
+                </option>
+              ))}
+            </select>
+            {groupPreview && (
+              <p className="text-xs text-zinc-500 mt-1.5">{groupPreview}</p>
+            )}
+          </div>
+          <div>
+            <label
+              htmlFor="draw-scoring"
+              className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2"
+            >
+              Points System
+            </label>
+            <select
+              id="draw-scoring"
+              value={scoring}
+              onChange={(e) => setScoring(e.target.value as Scoring)}
+              className={selectClass}
+            >
+              <option value="football">Win 3 · Draw 1 · Loss 0</option>
+              <option value="winOnly">Win 1 · Loss 0</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label
+              htmlFor="draw-team-size"
+              className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2"
+            >
+              Players Quantity per Team
+            </label>
+            <select
+              id="draw-team-size"
+              value={teamSize}
+              onChange={(e) => setTeamSize(Number(e.target.value))}
+              className={selectClass}
+            >
+              {[1, 2, 4, 5, 6, 8].map((n) => (
+                <option key={n} value={n}>
+                  1 Team = {n} Player{n > 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -282,160 +426,180 @@ const DrawTeamsModal = ({
     </div>
   );
 
-  const renderDrawing = () => (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
-          Drawing Teams...
-        </h3>
-        <p className="text-zinc-500 text-sm">
-          Team {currentDrawIndex + 1} of {drawnTeams.length}
-        </p>
-      </div>
+  const renderDrawing = () => {
+    const team = drawnTeams[currentDrawIndex];
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
+            Drawing Teams...
+          </h3>
+          <p className="text-zinc-500 text-sm" aria-live="polite">
+            Team {currentDrawIndex + 1} of {drawnTeams.length}
+          </p>
+        </div>
 
-      <div className="relative h-64 flex items-center justify-center overflow-hidden">
-        {drawnTeams.slice(0, currentDrawIndex + 1).map((team, idx) => {
-          const isLatest = idx === currentDrawIndex;
-          return (
+        <div className="h-48 sm:h-64 flex items-center justify-center">
+          {team && (
             <div
               key={team._id}
-              className={`absolute transition-all duration-500 ${
-                isLatest
-                  ? "scale-100 opacity-100 z-10"
-                  : "scale-75 opacity-0 z-0"
+              className="p-6 bg-linear-to-br from-[#DD1D25] to-[#C41920] text-white rounded-xl shadow-2xl w-full max-w-xs animate-in fade-in zoom-in-95 duration-300 text-center"
+            >
+              <div className="text-2xl sm:text-4xl font-bold mb-2 break-words">
+                {team.name}
+              </div>
+              <div className="text-sm opacity-90">{team.sport}</div>
+              <div className="mt-3 text-xs opacity-75">
+                {team.members.length} Member
+                {team.members.length === 1 ? "" : "s"}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 justify-center">
+          {drawnTeams.map((t, idx) => (
+            <div
+              key={t._id}
+              className={`h-2 rounded-full transition-all ${
+                idx <= currentDrawIndex
+                  ? "w-6 bg-[#DD1D25]"
+                  : "w-2 bg-zinc-300 dark:bg-zinc-700"
               }`}
+            />
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={skipAnimation}
+          className="w-full py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+        >
+          Skip animation
+        </button>
+      </div>
+    );
+  };
+
+  const renderResult = () => {
+    const draw = savedDraw;
+    let body: React.ReactNode = (
+      <p className="text-center text-sm text-zinc-500 py-8">
+        {isSaving ? "Saving draw..." : "The draw could not be saved."}
+      </p>
+    );
+
+    if (draw?.format === "Knockout") {
+      const slots = draw.bracketSlots ?? draw.drawnTeams;
+      const ties: [string, string][] = [];
+      for (let i = 0; i < slots.length; i += 2) {
+        ties.push([slots[i]?.name ?? "Bye", slots[i + 1]?.name ?? "Bye"]);
+      }
+      body = (
+        <ol className="space-y-2">
+          {ties.map(([a, b], i) => (
+            <li
+              key={i}
+              className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm"
             >
-              <div className="p-6 bg-linear-to-br from-[#DD1D25] to-[#C41920] text-white rounded-xl shadow-2xl min-w-[300px]">
-                <div className="text-center">
-                  <div className="text-4xl font-bold mb-2">{team.name}</div>
-                  <div className="text-sm opacity-90">{team.sport}</div>
-                  <div className="mt-3 text-xs opacity-75">
-                    {team.members.length} Member
-                    {team.members.length > 1 ? "s" : ""}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex gap-2 justify-center">
-        {drawnTeams.map((_, idx) => (
-          <div
-            key={idx}
-            className={`h-2 rounded-full transition-all ${
-              idx <= currentDrawIndex
-                ? "w-8 bg-[#DD1D25]"
-                : "w-2 bg-zinc-300 dark:bg-zinc-700"
-            }`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderResult = () => (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
-          🎉 Draw Complete!
-        </h3>
-        <p className="text-zinc-500 text-sm">
-          {format === "Group" ? "Group Draw Results" : "Knockout Draw Results"}
-        </p>
-        {isSaving && (
-          <p className="text-xs text-zinc-400 mt-1">Saving draw...</p>
-        )}
-      </div>
-
-      <div className="max-h-96 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-        {format === "Group" ? (
-          <div className="space-y-6">
-            {(() => {
-              const columns = [];
-              const chunkSize = 4;
-              for (let i = 0; i < drawnTeams.length; i += chunkSize) {
-                columns.push(drawnTeams.slice(i, i + chunkSize));
-              }
-
-              return columns.map((colTeams, idx) => (
-                <div
-                  key={idx}
-                  className="bg-zinc-50 dark:bg-zinc-800/20 rounded-xl p-4 border border-zinc-100 dark:border-zinc-800 text-left"
-                >
-                  <h4 className="text-sm font-bold uppercase mb-3 text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                    Group {String.fromCharCode(65 + idx)}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-2">
-                    {colTeams.map((team, tIdx) => (
-                      <div
-                        key={team._id}
-                        className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700/50 rounded-lg flex items-center gap-3"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-[#DD1D25] text-white flex items-center justify-center font-bold text-xs opacity-80">
-                          {tIdx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className="font-bold text-zinc-900 dark:text-zinc-50 truncate text-sm">
-                            {team.name}
-                          </p>
-                          <p className="text-[10px] text-zinc-500 uppercase">
-                            {team.members.length} Players Team
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
-        ) : (
-          drawnTeams.map((team, idx) => (
+              <span className="w-7 h-7 shrink-0 rounded-full bg-[#DD1D25] text-white flex items-center justify-center font-bold text-xs">
+                {i + 1}
+              </span>
+              <span className="flex-1 min-w-0 truncate font-bold text-right">
+                {a}
+              </span>
+              <span className="text-zinc-400 text-xs font-bold">vs</span>
+              <span
+                className={`flex-1 min-w-0 truncate font-bold ${b === "Bye" ? "italic text-emerald-600 dark:text-emerald-400" : ""}`}
+              >
+                {b}
+              </span>
+            </li>
+          ))}
+        </ol>
+      );
+    } else if (draw) {
+      body = (
+        <div className="space-y-4">
+          {(draw.groupings ?? []).map((group) => (
             <div
-              key={team._id}
-              className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center gap-4 text-left"
+              key={group.name}
+              className="bg-zinc-50 dark:bg-zinc-800/20 rounded-xl p-4 border border-zinc-100 dark:border-zinc-800"
             >
-              <div className="w-10 h-10 rounded-full bg-[#DD1D25] text-white flex items-center justify-center font-bold">
-                {idx + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-zinc-900 dark:text-zinc-50 text-lg truncate mb-1">
-                  {team.name}
-                </p>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span>{team.sport}</span>
-                  <span>•</span>
-                  <span>{team.members.length} Members</span>
-                </div>
-              </div>
+              <h4 className="text-sm font-bold uppercase mb-3 text-zinc-800 dark:text-zinc-200">
+                {draw.format === "League"
+                  ? "League Table"
+                  : `Group ${group.name}`}
+                <span className="ml-2 text-[10px] font-semibold normal-case text-zinc-400">
+                  {fixtureCount(group)} fixtures · {matchdays(group).length}{" "}
+                  matchdays
+                </span>
+              </h4>
+              <ol className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {group.teams.map((team, tIdx) => (
+                  <li
+                    key={team._id}
+                    className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700/50 rounded-lg flex items-center gap-3"
+                  >
+                    <span className="w-6 h-6 shrink-0 rounded-full bg-[#DD1D25]/90 text-white flex items-center justify-center font-bold text-[10px]">
+                      {tIdx + 1}
+                    </span>
+                    <span className="font-bold text-zinc-900 dark:text-zinc-50 truncate text-sm">
+                      {team.name}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      );
+    }
 
-      <div className="flex gap-3">
-        <button
-          onClick={() => {
-            setStep("selectEvent");
-            setSelectedEvent("");
-            setDrawnTeams([]);
-            setCurrentDrawIndex(0);
-          }}
-          className="flex-1 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-        >
-          New Draw
-        </button>
-        <button
-          onClick={onClose}
-          className="flex-1 py-2.5 bg-[#DD1D25] text-white font-bold rounded-lg hover:bg-[#C41920] transition-colors"
-        >
-          Close
-        </button>
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
+            🎉 Draw Complete!
+          </h3>
+          <p className="text-zinc-500 text-sm">
+            {draw?.format === "Knockout"
+              ? `${roundName(draw.bracketSlots?.length ?? 2)} draw`
+              : (draw?.stage ?? "Draw results")}
+          </p>
+        </div>
+
+        <div className="max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+          {body}
+        </div>
+
+        <div className="flex gap-3">
+          {!draw && !isSaving ? (
+            <button
+              onClick={saveDraw}
+              className="flex-1 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            >
+              Retry Save
+            </button>
+          ) : (
+            <button
+              onClick={reset}
+              disabled={isSaving}
+              className="flex-1 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+            >
+              New Draw
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 bg-[#DD1D25] text-white font-bold rounded-lg hover:bg-[#C41920] transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Draw Teams">

@@ -37,4 +37,8 @@ const MeetingSchema: Schema = new Schema(
   { timestamps: true },
 );
 
+// "Meetings I'm invited to" (multikey) and the admin list, newest first.
+MeetingSchema.index({ participants: 1, date: -1 });
+MeetingSchema.index({ date: -1 });
+
 export default mongoose.model<IMeeting>("Meeting", MeetingSchema);

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Equipment, { IEquipment } from "../models/Equipment.js";
 import Responsibility, { RequestStatus } from "../models/Responsibility.js";
 import { UserRole } from "../models/User.js";
+import { closedReason, getEquipmentWindow } from "./requestWindowController.js";
 
 // --- Equipment Inventory ---
 
@@ -79,19 +80,10 @@ export const requestEquipment = async (req: Request, res: Response) => {
     const { equipmentId, quantity, notes } = req.body;
     const userId = req.user?._id;
 
-    // Time Restriction: 9 AM - 5 PM Nepal Time
-    const nptTime = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kathmandu",
-      hour: "numeric",
-      hour12: false,
-    });
-    const currentHourNPT = parseInt(nptTime.format(new Date()));
-
-    if (currentHourNPT < 9 || currentHourNPT >= 17) {
-      return res.status(403).json({
-        message:
-          "Equipment requests are only allowed between 9:00 AM and 5:00 PM daily (Nepal Time).",
-      });
+    // Request window (scheduled hours / always open / closed), managed by staff.
+    const closed = closedReason(await getEquipmentWindow());
+    if (closed) {
+      return res.status(403).json({ message: closed });
     }
 
     if (req.user?.role === UserRole.SUPERUSER) {
@@ -198,7 +190,9 @@ export const getResponsibilities = async (req: Request, res: Response) => {
     const responsibilities = await Responsibility.find(query)
       .populate("user", "name email role")
       .populate("equipment", "name category type")
-      .populate("approvedBy", "name");
+      .populate("approvedBy", "name")
+      .sort({ requestDate: -1 })
+      .lean();
 
     res.json(responsibilities);
   } catch (error) {
@@ -400,9 +394,41 @@ export const getWaitlist = async (req: Request, res: Response) => {
       status: RequestStatus.WAITING,
     })
       .populate("user", "name email studentId")
-      .sort({ requestDate: 1 }); // FIFO
+      .sort({ requestDate: 1 }) // FIFO
+      .lean();
 
     res.json(waitlist);
+  } catch (error) {
+    res.status(500).json({ message: (error as Error).message });
+  }
+};
+
+// @desc    Waitlists for several items in one query
+// @route   GET /api/equipment/waitlists?ids=a,b,c
+// @access  Private
+export const getWaitlists = async (req: Request, res: Response) => {
+  try {
+    const ids = String(req.query.ids || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => /^[a-f\d]{24}$/i.test(id))
+      .slice(0, 100);
+    if (!ids.length) return res.json({});
+
+    const waiting = await Responsibility.find({
+      equipment: { $in: ids },
+      status: RequestStatus.WAITING,
+    })
+      .populate("user", "name email studentId")
+      .sort({ requestDate: 1 }) // FIFO
+      .lean();
+
+    // { [equipmentId]: Responsibility[] }, every requested id present.
+    const byEquipment: Record<string, unknown[]> = Object.fromEntries(
+      ids.map((id) => [id, []]),
+    );
+    waiting.forEach((r) => byEquipment[String(r.equipment)]?.push(r));
+    res.json(byEquipment);
   } catch (error) {
     res.status(500).json({ message: (error as Error).message });
   }

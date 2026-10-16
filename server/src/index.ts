@@ -11,10 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import { apiLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 
 // Middleware
+// gzip responses: JSON lists (teams, draws, members) shrink by ~70–80%.
+app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
 app.set("trust proxy", 1); // Trust first proxy (e.g. Vercel, Heroku, Nginx)

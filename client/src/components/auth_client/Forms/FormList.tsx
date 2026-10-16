@@ -8,6 +8,7 @@ import {
   clearError,
 } from "../../../store/slices/formSlice";
 import type { Form } from "../../../types";
+import { CardGridSkeleton } from "../../ui/Skeleton";
 
 // Icons
 const ClipboardListIcon = ({ className }: { className?: string }) => (
@@ -150,9 +151,7 @@ export const FormList = () => {
       </div>
 
       {loading && forms.length === 0 ? (
-        <div className="flex justify-center p-12">
-          <div className="w-8 h-8 border-4 border-[#DD1D25] border-t-transparent rounded-full animate-spin"></div>
-        </div>
+        <CardGridSkeleton label="Loading forms" />
       ) : forms.length === 0 ? (
         <div className="text-center p-12 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
           <ClipboardListIcon className="w-12 h-12 text-zinc-400 mx-auto mb-4" />

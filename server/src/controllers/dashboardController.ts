@@ -14,47 +14,58 @@ export const getDashboardSummary = async (req: Request, res: Response) => {
     const role = req.user?.role;
     const userId = req.user?._id;
 
-    const data: any = {};
+    // Every query below is independent, so run them concurrently.
+    const common = {
+      announcements: Announcement.find({})
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      upcomingEvents: Event.find({ date: { $gte: new Date() } })
+        .sort({ date: 1 })
+        .limit(5)
+        .lean(),
+    };
 
-    // Common data
-    data.announcements = await Announcement.find({})
-      .sort({ createdAt: -1 })
-      .limit(5);
-    data.upcomingEvents = await Event.find({ date: { $gte: new Date() } })
-      .sort({ date: 1 })
-      .limit(5);
-
+    let byRole: Record<string, Promise<unknown>>;
     if (role === UserRole.ADMIN) {
-      data.totalUsers = await User.countDocuments();
-      data.totalEquipment = await Equipment.countDocuments();
-      data.totalTeams = await Team.countDocuments();
-      data.pendingRequests = await Responsibility.countDocuments({
-        status: RequestStatus.PENDING,
-      });
+      byRole = {
+        totalUsers: User.countDocuments(),
+        totalEquipment: Equipment.countDocuments(),
+        totalTeams: Team.countDocuments(),
+        pendingRequests: Responsibility.countDocuments({
+          status: RequestStatus.PENDING,
+        }),
+      };
     } else if (role === UserRole.SUPERUSER) {
-      data.totalEquipment = await Equipment.countDocuments();
-      data.managedResponsibilities = await Responsibility.countDocuments({
-        status: { $ne: RequestStatus.RETURNED },
-      });
+      byRole = {
+        totalEquipment: Equipment.countDocuments(),
+        managedResponsibilities: Responsibility.countDocuments({
+          status: { $ne: RequestStatus.RETURNED },
+        }),
+      };
     } else if (role === UserRole.MODERATOR) {
-      data.membersCount = await User.countDocuments({ role: UserRole.USER });
-      data.myTeam = await Team.findOne({ executive: userId }).populate(
-        "members",
-        "name",
-      );
+      byRole = {
+        membersCount: User.countDocuments({ role: UserRole.USER }),
+        myTeam: Team.findOne({ executive: userId })
+          .populate("members", "name")
+          .lean(),
+      };
     } else {
       // Regular User
-      data.myRegisteredEventsCount = await Event.countDocuments({
-        participants: userId,
-      });
-      data.myTeam = await Team.findOne({ members: userId }).populate(
-        "members",
-        "name",
-      );
-      data.myRequestsCount = await Responsibility.countDocuments({
-        user: userId,
-      });
+      byRole = {
+        myRegisteredEventsCount: Event.countDocuments({ participants: userId }),
+        myTeam: Team.findOne({ members: userId })
+          .populate("members", "name")
+          .lean(),
+        myRequestsCount: Responsibility.countDocuments({ user: userId }),
+      };
     }
+
+    const entries = Object.entries({ ...common, ...byRole });
+    const values = await Promise.all(entries.map(([, query]) => query));
+    const data = Object.fromEntries(
+      entries.map(([key], i) => [key, values[i]]),
+    );
 
     res.json(data);
   } catch (error) {

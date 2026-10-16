@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../../../services/api";
 import { format } from "date-fns";
 import { useAppSelector } from "../../../store/hooks";
-import LoadingSpinner from "../../ui/LoadingSpinner";
+import { ListSkeleton } from "../../ui/Skeleton";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 const EMOJI_LABELS: { [key: string]: string } = {
@@ -233,7 +233,7 @@ const Announcements = () => {
       </div>
 
       {loading ? (
-        <LoadingSpinner />
+        <ListSkeleton rows={3} tall label="Loading announcements" />
       ) : announcements.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
           <p className="text-zinc-500 dark:text-zinc-400 font-medium text-center">

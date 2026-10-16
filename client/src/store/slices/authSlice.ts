@@ -168,7 +168,9 @@ const authSlice = createSlice({
 
     // Fetch Profile
     builder.addCase(fetchProfile.pending, (state) => {
-      state.isCheckingAuth = true;
+      // Only the initial session check blocks protected routes; refreshing an
+      // already-signed-in profile (e.g. from the Profile page) must not.
+      if (!state.isAuthenticated) state.isCheckingAuth = true;
     });
     builder.addCase(
       fetchProfile.fulfilled,

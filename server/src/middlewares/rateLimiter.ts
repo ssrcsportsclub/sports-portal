@@ -1,9 +1,11 @@
 import { rateLimit } from "express-rate-limit";
 
-// General rate limiter for all API requests
+// General rate limiter for all API requests. A single dashboard page issues
+// several requests and campus users often share one NAT address, so the
+// default is generous; override with API_RATE_LIMIT.
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  limit: Number(process.env.API_RATE_LIMIT) || 1000, // per IP per window
   standardHeaders: "draft-7", // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: {
