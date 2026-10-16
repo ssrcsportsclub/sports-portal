@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@vercel/functions": "^3.10.1",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",

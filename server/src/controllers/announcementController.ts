@@ -3,6 +3,7 @@ import Announcement from "../models/Announcement.js";
 import NotificationList from "../models/NotificationList.js";
 import User from "../models/User.js";
 import { sendAnnouncementEmail } from "../utils/emailHelper.js";
+import { waitUntil } from "@vercel/functions";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -128,8 +129,10 @@ export const createAnnouncement = async (req: Request, res: Response) => {
       .status(201)
       .json(transformAnnouncement(populatedAnnouncement, req.user?._id));
 
-    // Send emails to subscribers
-    (async () => {
+    // Send emails to subscribers after responding. On Vercel the function is
+    // frozen once the response is sent, so waitUntil keeps it alive until the
+    // emails finish (outside Vercel it's a no-op and the promise just runs).
+    const emailJob = (async () => {
       try {
         const list = await NotificationList.findOne({ name: "announcements" });
         if (list && list.emails.length > 0) {
@@ -153,6 +156,7 @@ export const createAnnouncement = async (req: Request, res: Response) => {
         console.error("[AnnouncementEmail] Error:", emailError);
       }
     })();
+    waitUntil(emailJob);
   } catch (error) {
     res.status(500).json({ message: (error as Error).message });
   }
